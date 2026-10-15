@@ -26,38 +26,140 @@ Berbeda dari gateway mandiri standar yang hanya berfungsi sebagai panel terpisah
 
 ---
 
-## 🏗️ Arsitektur Integrasi Back-Office
+## 🏗️ 1. Diagram Arsitektur Integrasi
+
+Diagram berikut menggambarkan bagaimana setiap lapisan sistem saling terhubung secara terstruktur tanpa tumpang tindih:
 
 ```mermaid
-flowchart TB
-    subgraph Pelanggan ["📱 Pelanggan / Frontend Storefront"]
-        User["Pengguna (Web / Mobile)"]
+flowchart TD
+    classDef client fill:#1e293b,stroke:#3b82f6,stroke-width:2px,color:#fff;
+    classDef backend fill:#0f172a,stroke:#10b981,stroke-width:2px,color:#fff;
+    classDef gateway fill:#18181b,stroke:#25d366,stroke-width:2px,color:#fff;
+    classDef wa fill:#064e3b,stroke:#34d399,stroke-width:2px,color:#fff;
+
+    subgraph CLIENT_LAYER ["1. LAPISAN APLIKASI & PENGGUNA"]
+        direction LR
+        C1["Pelanggan Toko<br/>(Web / Mobile Storefront)"]:::client
+        C2["Admin Back-Office<br/>(React Admin Panel)"]:::client
     end
 
-    subgraph BackOffice ["🏢 Sistem Back-Office (Laravel + React)"]
-        BOController["WhatsAppGatewayBackOfficeController"]
-        ClientService["WhatsAppGatewayClient Service"]
-        WebhookListener["WhatsAppMemberWebhookController"]
-        SenderPoolMgr["Sender Pool Manager & Failover Engine"]
+    subgraph BACKEND_LAYER ["2. BACK-OFFICE BACKEND (LARAVEL CORE)"]
+        direction TB
+        B1["WhatsApp OTP Service<br/>(4-Digit OTP, Rate Limit, Auto-Restore)"]:::backend
+        B2["Multi-Sender Pool Manager<br/>(Round-Robin & Auto-Failover)"]:::backend
+        B3["Webhook Event Dispatcher<br/>(member.verified HMAC SHA-256)"]:::backend
     end
 
-    subgraph GatewayCore ["⚡ WhatsApp Gateway (OpenWA Baileys Core)"]
-        S1["Session 1: Nomor Pengirim Utama"]
-        S2["Session 2: Nomor Pengirim Cadangan"]
-        Engine["Gateway Routing & Message Queue"]
+    subgraph GATEWAY_LAYER ["3. WHATSAPP GATEWAY ENGINE (OPENWA CORE)"]
+        direction TB
+        G1["Gateway REST API & Router"]:::gateway
+        subgraph SESSIONS ["Pool Sesi WhatsApp Terhubung"]
+            S1["Sesi 1: Nomor Pengirim Utama"]:::gateway
+            S2["Sesi 2: Nomor Cadangan (Failover)"]:::gateway
+        end
     end
 
-    User -->|1. Request OTP / Login| BackOffice
-    SenderPoolMgr -->|2. Round-Robin / Failover| GatewayCore
-    GatewayCore -->|3. Kirim Pesan WA| User
-    User -->|4. Input OTP 4 Digit| BackOffice
-    BackOffice -.->|5. Webhook: member.verified| WebhookListener
-    ClientService -->|REST API Kontrol Sesi & Monitor| GatewayCore
+    subgraph WA_NETWORK ["4. JARINGAN RESMI WHATSAPP"]
+        W1["WhatsApp Cloud Server & Ponsel Pelanggan"]:::wa
+    end
+
+    %% Alur data utama
+    C1 -->|"1. Request OTP / Login"| B1
+    C2 -->|"Kontrol Sesi, QR & Monitor"| B2
+    B1 -->|"2. Minta Alokasi Pengirim"| B2
+    B2 -->|"3. Kirim Pesan Terjadwal"| G1
+    G1 -->|"Rotasi Sesi Aktif"| S1 & S2
+    S1 & S2 -->|"4. Kirim Pesan via Socket"| W1
+    W1 -.->|"5. Pelanggan Menerima & Input OTP"| C1
+    B1 -.->|"6. Member Terverifikasi"| B3
 ```
 
 ---
 
-## 🚀 Fitur Utama & Kustomisasi
+## 🔄 2. Diagram Alur Kerja Operasional (Step-by-Step)
+
+### A. Alur Login & Verifikasi OTP 4 Digit
+Alur interaksi dari saat pelanggan memasukkan nomor hingga berhasil login ke sistem:
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Pelanggan as Pelanggan Toko
+    participant Web as Storefront & Admin
+    participant Laravel as Laravel Backend
+    participant Gateway as WhatsApp Gateway
+    participant WA as Server WhatsApp
+
+    Pelanggan->>Web: Masukkan Nomor WhatsApp
+    Web->>Laravel: Request OTP (POST /api/v1/auth/whatsapp/request-otp)
+    Laravel->>Laravel: Generate OTP 4 Digit & Siapkan Verifier
+    Laravel->>Gateway: Kirim Pesan via Pool Sesi Aktif
+    Gateway->>WA: Teruskan Pesan ke Nomor Pelanggan
+    WA->>Pelanggan: Pesan Masuk: "Kode masuk Anda: 1234"
+    Pelanggan->>Web: Input 4 Angka OTP di Layar
+    Web->>Laravel: Verifikasi OTP (POST /api/v1/auth/whatsapp/verify-otp)
+    alt Akun Soft-Deleted / Baru
+        Laravel->>Laravel: Otomatis Pulihkan (Restore) & Aktifkan Akun
+    end
+    Laravel->>Web: Status Berhasil (Auth Cookie & Token)
+    Web->>Pelanggan: Masuk ke Dashboard Toko
+```
+
+---
+
+### B. Alur Multi-Sender Auto-Failover
+Bagaimana sistem secara otomatis menyelamatkan pengiriman OTP jika ada nomor yang bermasalah:
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Laravel as Sender Pool Service
+    participant S1 as Nomor Utama (Sender 1)
+    participant S2 as Nomor Cadangan (Sender 2)
+    participant Pelanggan as WhatsApp Pelanggan
+
+    Laravel->>S1: Coba kirim pesan OTP
+    alt Nomor Utama Normal
+        S1->>Pelanggan: Pesan OTP Berhasil Terkirim
+    else Nomor Utama Terputus / Rate-Limited / Banned
+        S1-->>Laravel: Status Gagal (Delivery Failed)
+        Laravel->>Laravel: Masukkan S1 ke Masa Cooldown
+        Laravel->>S2: AUTO-FAILOVER: Alihkan ke Nomor Cadangan
+        S2->>Pelanggan: Pesan OTP Tetap Terkirim ke Pelanggan!
+    end
+```
+
+---
+
+### C. Alur Pairing Nomor WhatsApp (QR & Kode Tautan) dengan Auto-Close
+Kemudahan admin dalam menyambungkan nomor WhatsApp pengirim tanpa perlu menutup modal secara manual:
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Admin as Admin Back-Office
+    participant Modal as Modal Hubungkan WA
+    participant Backend as Laravel Pool API
+    participant OpenWA as OpenWA Engine
+    actor HP as HP Nomor Pengirim
+
+    Admin->>Modal: Buka Modal Hubungkan WhatsApp
+    Modal->>OpenWA: Minta QR Code / Kode Tautan 8 Karakter
+    OpenWA-->>Modal: Tampilkan QR Code / Kode Tautan
+    Admin->>HP: Scan QR atau Masukkan Kode di WA HP
+    loop Polling Status Realtime (Tiap 2.5 Detik)
+        Modal->>Backend: Cek Status Sesi & Sync Nomor
+        Backend->>OpenWA: Cek Status Sesi
+        OpenWA-->>Backend: Status Berubah: "ready / working"
+        Backend-->>Modal: Sesi Terhubung!
+    end
+    Modal->>Modal: Otomatis Menutup Popup (Auto-Dismiss)
+    Modal->>Admin: Tampilkan Banner Notifikasi Sukses Hijau
+```
+
+---
+
+## 🚀 3. Fitur Utama & Kustomisasi Unggulan
 
 ### 1. 🔄 Multi-Sender Pool & Auto-Failover
 - **Rotasi Beban (Round-Robin)**: Membagi beban pengiriman pesan di antara beberapa nomor WhatsApp secara seimbang berdasarkan `last_used_at`.
@@ -87,7 +189,7 @@ flowchart TB
 
 ---
 
-## 📂 Struktur Direktori Proyek
+## 📂 4. Struktur Direktori Proyek
 
 ```
 wa-gateway/
@@ -117,7 +219,7 @@ wa-gateway/
 
 ---
 
-## 💻 Panduan Integrasi ke Back-Office Laravel
+## 💻 5. Panduan Integrasi ke Back-Office Laravel
 
 > 💡 **PENTING: Kapan Konfigurasi Ini Dibutuhkan?**
 > - **Pada website/aplikasi Anda yang sekarang:** Anda **TIDAK PERLU** mengisi variabel `.env` di bawah ini! Laravel dan Gateway Anda sudah menyatu 100% secara otomatis di level internal Docker (`http://openwa:2785`).
@@ -137,7 +239,7 @@ cp reference-laravel-client/src/Controllers/* app/Http/Controllers/BackOffice/
 cp reference-laravel-client/config/whatsapp_gateway_client.php config/
 ```
 
-### 2. Tambahkan Konfigurasi di `.env` Back-Office
+### 2. Tambahkan Konfigurasi di `.env` Back-Office Luar
 ```env
 WA_GATEWAY_API_URL="http://127.0.0.1:18090"
 WA_GATEWAY_API_TOKEN="token-admin-anda"
@@ -168,7 +270,7 @@ Route::post('webhooks/whatsapp/member-verified', WhatsAppMemberWebhookController
 
 ---
 
-## 🛠️ Katalog API Endpoints Gateway
+## 🛠️ 6. Katalog API Endpoints Gateway
 
 | Method | Endpoint | Deskripsi |
 |---|---|---|
@@ -185,7 +287,7 @@ Route::post('webhooks/whatsapp/member-verified', WhatsAppMemberWebhookController
 
 ---
 
-## 🐳 Menjalankan dengan Docker
+## 🐳 7. Menjalankan dengan Docker
 
 1. **Clone Repository:**
    ```bash
@@ -212,7 +314,7 @@ Route::post('webhooks/whatsapp/member-verified', WhatsAppMemberWebhookController
 
 ---
 
-## 🔒 Kebijakan Keamanan & Data Pribadi
+## 🔒 8. Kebijakan Keamanan & Data Pribadi
 
 1. **Enkripsi Kunci API**: Kunci API pada tabel pool nomor pengirim dienkripsi menggunakan standar AES-256 dan tidak pernah diekspos dalam format plaintext di respons API.
 2. **Tanpa Penyimpanan OTP Mentah**: Kode OTP yang dihasilkan tidak disimpan di database dalam bentuk teks biasa, melainkan diverifikasi melalui tanda tangan HMAC acak satu kali pakai (*single-use consumption*).
