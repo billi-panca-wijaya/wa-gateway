@@ -1,0 +1,97 @@
+API_CONTRACT — CUSTOMER LOGIN VIA WHATSAPP OTP (FINAL MAPPING)
+Engine: Laravel (laravel-headless-starter/api). Prefix aktual engine: /api/v1 (bukan /api seperti master §9).
+Semua request JSON, header Accept: application/json, cookie session (Sanctum SPA) + header X-XSRF-TOKEN.
+Sebelum POST pertama: GET /sanctum/csrf-cookie (204, set cookie XSRF-TOKEN).
+Tenant: diresolusi server dari host (WA_OTP_TENANT_HOSTS) — tidak ada field tenant di body.
+Contoh di bawah TIDAK memuat secret/OTP nyata.
+
+1. POST /api/v1/auth/whatsapp/request-otp
+   header opsional: Idempotency-Key: <1-128 visible ASCII>   (atau field idempotency_key)
+   body: {"phone": "0812-3456-7890", "purpose": "login"}      purpose opsional, hanya "login"
+   200: {"challenge_id":"<40 hex>","masked_phone":"+6281******890","expires_at":"ISO8601",
+         "resend_available_at":"ISO8601","resend_after":60,"delivery_status":"submitted|unknown"}
+        + "replayed": true bila Idempotency-Key sama (tidak ada kirim ulang)
+   422 PHONE_INVALID | 422 IDEMPOTENCY_KEY_REUSED | 422 (validasi Laravel: {"message","errors"})
+   429 RATE_LIMITED | 429 RESEND_COOLDOWN  (+ header Retry-After, field retry_after)
+   409 REQUEST_IN_PROGRESS | 503 TRANSPORT_UNAVAILABLE {"delivery_status":"failed"}
+
+2. POST /api/v1/auth/whatsapp/verify-otp
+   body: {"challenge_id":"<40 hex>","code":"012345"}   code WAJIB string 6 digit
+   200: {"authenticated":true,"user":{"id":"<uuid>","login_id":"+62812...","phone_e164":"+62812...",
+         "name":null,"onboarding_required":true},"onboarding_required":true,"next":"/onboarding|/dashboard"}
+        + session cookie diregenerasi.
+   401 OTP_INVALID {"attempts_remaining":n?} | 401 OTP_EXPIRED | 409 CHALLENGE_SUPERSEDED
+   429 OTP_ATTEMPTS_EXCEEDED | 429 RATE_LIMITED | 403 ACCOUNT_DISABLED
+   400 STATEFUL_ORIGIN_REQUIRED (request tanpa origin/referer terdaftar di SANCTUM_STATEFUL_DOMAINS)
+   challenge tenant lain / tidak ada → 401 OTP_INVALID (tidak membocorkan keberadaan)
+
+3. POST /api/v1/auth/whatsapp/resend-otp
+   header opsional Idempotency-Key; body: {"challenge_id":"<lama>"}
+   200: sama dengan request-otp (challenge_id BARU); challenge lama → superseded.
+   409 CHALLENGE_NOT_RESENDABLE (tidak ada/verified/cancelled) | 429 RESEND_COOLDOWN | 429 RATE_LIMITED | 503
+
+4. GET /api/v1/auth/me   (auth:sanctum + EnsureCustomerTenant)
+   200: {"data":{...user, "login_id","phone_e164","onboarding_required","roles":[...],"permissions":[...]}}
+   401 tanpa sesi | 403 TENANT_MISMATCH
+
+5. POST /api/v1/auth/logout   (auth:sanctum, CSRF) → 200 {"message":"Logged out successfully"}; session invalidated.
+
+6. PATCH /api/v1/profile/onboarding   (auth:sanctum + EnsureCustomerTenant)
+   body: {"name":"Budi"}  — field lain (role, tenant_key, phone_e164, is_active, user_id) diabaikan.
+   200: {"user":{...},"onboarding_required":false,"next":"/dashboard"} | 422 validasi | 401
+
+7. Route protected engine (/api/v1/dashboard, users, categories, items):
+   + EnsureOnboardingCompleted → 403 {"code":"ONBOARDING_REQUIRED","next":"/onboarding"} untuk akun
+   WhatsApp yang belum onboarding. Akun email/Google lama tidak terdampak (onboarding_required=false).
+
+MAPPING GATEWAY (server-side saja, tidak pernah dari browser)
+   OpenWA: POST {OPENWA_BASE_URL}/api/sessions/{OPENWA_SESSION_ID}/messages/send-text
+   header: X-API-Key: <OPENWA_API_KEY, role operator, allowedSessions=[sender]>, Idempotency-Key: <challenge_id>
+   body: {"chatId":"6281234567890@c.us","text":"<template berisi OTP>"}
+   201 {"messageId","timestamp"} = diterima gateway (submitted), BUKAN delivered/read.
+   Template default (WA_OTP_MESSAGE_TEMPLATE):
+   "Kode masuk :app Anda: :code. Berlaku :minutes menit. Jangan bagikan kode ini kepada siapa pun."
+
+PARAMETER DEFAULT (env, server-side): TTL 300s, cooldown 60s, max attempts 5,
+   send 5/15m per tenant+nomor, 20/15m per IP, 500/15m global per tenant, verify 60/15m per IP.
+
+8. ADMIN GATEWAY (pembaruan 2026-10-12) — hanya role admin|super-admin, sesi Sanctum
+   GET  /api/v1/admin/whatsapp-gateway            status sesi pengirim OTP (operator key, server-side)
+   POST /api/v1/admin/whatsapp-gateway/start|stop|logout ; GET .../qr ; POST .../pairing-code {"phone"}
+   DIHAPUS (D19): POST .../restart, POST .../send, POST .../broadcast, GET .../messages
+   GET  /api/v1/admin/gateway-auth                subrequest nginx (auth_request), tidak dipanggil browser langsung
+        204 admin | 401 tanpa sesi | 403 customer, Origin di luar SANCTUM_STATEFUL_DOMAINS, atau
+        X-Original-Method non-GET tanpa X-Requested-With: XMLHttpRequest
+   Proxy (nginx web): /gateway-api/<path>   → openwa:2785/api/<path>   + X-API-Key OPENWA_DASHBOARD_API_KEY
+                      /gateway-socket/<path> → openwa:2785/<path> (socket.io, path /gateway-socket/socket.io)
+   Cookie website dibuang sebelum diteruskan ke gateway; Set-Cookie gateway disembunyikan.
+
+9. ONBOARDING (pembaruan 2026-10-12, D18)
+   PATCH /api/v1/profile/onboarding body {"name"} SAJA. Field "phone" diabaikan — nomor hanya dari OTP.
+   onboarding_required = true hanya untuk akun ber-nomor WhatsApp yang belum onboarding / belum bernama.
+
+10. ADMIN SENDER POOL API (pembaruan 2026-10-14, D24, D25, D28, D30) — role admin|super-admin, auth:sanctum
+   GET    /api/v1/admin/sender-pool                       List seluruh sender pool per tenant (status, last_used_at, fail_count)
+   POST   /api/v1/admin/sender-pool                       Tambah sender baru {"session_id","label"?,"api_key"?,"auto_create_session"?}
+          api_key dienkripsi AES-256 via Laravel Crypt, tidak pernah ditampilkan kembali (hanya has_api_key boolean).
+   GET    /api/v1/admin/sender-pool/{id}                  Detail sender + real-time gateway live_status
+   PUT    /api/v1/admin/sender-pool/{id}                  Update label, status (active/suspended), api_key baru
+   DELETE /api/v1/admin/sender-pool/{id}?delete_session=1 Hapus sender dari pool (opsional hapus sesi OpenWA)
+   POST   /api/v1/admin/sender-pool/{id}/toggle           Toggle status active <-> suspended
+   POST   /api/v1/admin/sender-pool/{id}/sync             Sinkronkan status dari engine OpenWA ke DB
+   POST   /api/v1/admin/sender-pool/{id}/start|stop|logout Kontrol sesi OpenWA spesifik nomor
+   GET    /api/v1/admin/sender-pool/{id}/qr               Data QR Code pairing (base64 image)
+   POST   /api/v1/admin/sender-pool/{id}/pairing-code     Request 8-digit kode pairing WhatsApp {"phone": "08xxx"}
+   POST   /api/v1/admin/sender-pool/{id}/test-send        Kirim pesan teks uji coba {"phone": "08xxx", "message": "..."}
+
+11. ADMIN VERIFIED MEMBERS & WEBHOOK CONTRACT (pembaruan 2026-10-14, D27)
+   GET    /api/v1/admin/verified-members                  Paginasi member terverifikasi OTP
+          query: ?page=1&per_page=20&search=08xxx&date_from=...&date_to=...&tenant_key=default
+          response: {"status":"success","meta":{"current_page":1,"last_page":1,"total":N,
+                     "stats":{"total_verified":N,"verified_today":N,"verified_last_7_days":N}},
+                     "data":[{"id":1,"uuid":"...","name":"...","phone_e164":"+628...","phone_verified_at":"...", ...}]}
+   GET    /api/v1/admin/verified-members/{id}             Detail lengkap satu member terverifikasi
+   WEBHOOK member.verified (server-to-server POST ke WA_OTP_VERIFIED_MEMBER_WEBHOOK_URL saat member baru sukses OTP):
+          header: X-Webhook-Signature: hash_hmac('sha256', raw_json, WA_OTP_WEBHOOK_SECRET)
+          body: {"event":"member.verified","user_id":1,"uuid":"...","tenant_key":"default",
+                 "phone_e164":"+6281234567890","phone_verified_at":"ISO8601","timestamp":"ISO8601"}

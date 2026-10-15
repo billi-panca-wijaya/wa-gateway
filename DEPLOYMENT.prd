@@ -1,0 +1,100 @@
+DEPLOYMENT — WA GATEWAY + WEBSITE OTP LOGIN
+Status: READY_TO_DEPLOY (tervalidasi lokal Docker Desktop 2026-10-08). BELUM dijalankan di VPS.
+Zona waktu: Asia/Jakarta (+07:00)
+
+1. TOPOLOGI TARGET
+   Browser ──(nanti: Cloudflare → aaPanel/Apache)──> 127.0.0.1:WEB_PORT ─> [wa-login-web] nginx
+        nginx ─ /api,/sanctum,/up ─> app (php-fpm Laravel) ─> postgres, redis (tanpa port host)
+        app ──(network privat wa-gateway-net)──> http://openwa:2785  [wa-gateway] OpenWA
+   Admin (pairing QR nomor pengirim): SSH tunnel PC → 127.0.0.1:WA_GATEWAY_PORT (dashboard OpenWA).
+   Customer TIDAK pernah mengakses gateway.
+
+2. FOLDER & PROJECT VPS (usulan, cek dulu belum ada)
+   /www/docker/wa-gateway      → isi: deploy/ (compose.yaml, .env.example) + *.prd. compose project "wa-gateway"
+   /www/docker/wa-login-web    → isi: source laravel-headless-starter (tanpa vendor/node_modules/.env).
+                                  compose project "wa-login-web", file deploy/compose.yaml
+   Kontainer: wa-gateway-openwa, wa-login-web-{app,web,scheduler,postgres,redis}-1
+   Volume: wa-gateway_openwa-data, wa-login-web_pgdata, wa-login-web_redisdata, wa-login-web_app-storage
+   Network: wa-gateway-net (dibuat stack gateway; web join external), wa-login-web_default
+
+3. PORT (WAJIB diverifikasi di VPS dengan ss -tulpn + docker ps sebelum dipakai)
+   Usulan: WEB_PORT=18090, WA_GATEWAY_PORT=18091 (bind 127.0.0.1). Dilarang: 3000, 18080, 18081, 19119.
+   Jika terpakai → pilih port loopback lain yang bebas dan catat di sini.
+   Lokal (PC) sudah dipakai untuk uji: 127.0.0.1:18090 (web), 127.0.0.1:18091 (gateway).
+
+4. ENV & RAHASIA (hanya nama variabel; nilai dibuat di server dengan openssl, tidak dikirim lewat chat)
+   wa-gateway/deploy/.env: WA_GATEWAY_PORT, API_MASTER_KEY, API_KEY_PEPPER, ENGINE_TYPE=baileys,
+     MESSAGE_RETENTION_DAYS=1
+   wa-login-web/deploy/.env: RELEASE, WEB_PORT, APP_KEY, APP_URL, SANCTUM_STATEFUL_DOMAINS,
+     CORS_ALLOWED_ORIGINS, SESSION_SECURE_COOKIE, DB_PASSWORD, WA_OTP_HMAC_SECRET,
+     OPENWA_API_KEY (OPERATOR, allowedSessions=[sender]), OPENWA_SESSION_ID
+   Saat domain aktif: APP_URL=https://domain, SANCTUM_STATEFUL_DOMAINS=domain, CORS_ALLOWED_ORIGINS=https://domain,
+     SESSION_SECURE_COOKIE=true, lalu `up -d` ulang (config di-cache saat container start).
+
+5. LANGKAH DEPLOY (pemilik menjalankan; satu command per langkah; tunggu output yang diperlukan)
+   A. [VPS bash] pemeriksaan read-only: pwd; ls -la /www/docker; docker ps; ss -tulpn; df -h; free -h;
+      docker compose version; ls -la /www/docker/wa-gateway /www/docker/wa-login-web (harus belum ada).
+   B. [PC PowerShell] buat arsip:
+      tar -czf "$env:TEMP\wa-gateway-deploy.tgz" -C C:\project\bily\WORK\wa-gateway deploy/compose.yaml deploy/.env.example WA_GATEWAY_MASTER.prd PRD.prd WORKFLOW.prd WORKTASK.prd HANDOFF.prd DECISIONS.prd API_CONTRACT.prd DEPLOYMENT.prd TEST_REPORT.prd
+      tar -czf "$env:TEMP\wa-login-web.tgz" --exclude=vendor --exclude=node_modules --exclude=.env --exclude=dist --exclude=.phpunit.result.cache -C C:\project\bily\WORK laravel-headless-starter
+   C. [PC PowerShell] scp ke /tmp VPS dengan akses SSH yang sudah ada (host/user sesuai konfigurasi pemilik).
+   D. [VPS bash] mkdir -p /www/docker/wa-gateway && tar -xzf /tmp/wa-gateway-deploy.tgz -C /www/docker/wa-gateway
+      mkdir -p /www/docker/wa-login-web && tar -xzf /tmp/wa-login-web.tgz -C /www/docker/wa-login-web --strip-components=1
+   E. [VPS bash] buat .env gateway dari .env.example; isi API_MASTER_KEY & API_KEY_PEPPER dengan `openssl rand -hex 32`
+      (chmod 600 .env). cd /www/docker/wa-gateway/deploy && docker compose ps && docker compose up -d
+      Health: curl -fsS http://127.0.0.1:18091/api/health/ready
+   F. [PC] SSH tunnel: ssh -L 18091:127.0.0.1:18091 <akses-ssh-biasa> → buka http://localhost:18091,
+      login dashboard dengan API_MASTER_KEY, buat session "otp-sender", scan QR dengan HP nomor PENGIRIM,
+      buat API key role operator dengan allowed session = otp-sender. Catat session id; key hanya ditempel
+      ke file .env di VPS (tidak dikirim ke chat).
+   G. [VPS bash] cd /www/docker/wa-login-web && cp deploy/.env.example deploy/.env; isi DB_PASSWORD,
+      WA_OTP_HMAC_SECRET (openssl), APP_KEY (base64:$(openssl rand -base64 32)), OPENWA_*; chmod 600.
+      docker compose -f deploy/compose.yaml --env-file deploy/.env build
+      docker compose -f deploy/compose.yaml --env-file deploy/.env up -d postgres redis
+      docker compose -f deploy/compose.yaml --env-file deploy/.env run --rm --no-deps app php artisan migrate --force
+        (DB BARU & KOSONG milik project ini saja — tidak menyentuh DB project lain)
+      docker compose -f deploy/compose.yaml --env-file deploy/.env run --rm --no-deps app php artisan tinker --execute="Spatie\Permission\Models\Role::firstOrCreate(['name'=>'user','guard_name'=>'web']);"
+      docker compose -f deploy/compose.yaml --env-file deploy/.env up -d
+   H. Health: curl -fsS http://127.0.0.1:18090/api/v1/health ; curl -fsS -o /dev/null -w '%{http_code}' http://127.0.0.1:18090/
+   I. Uji login nyata = T13 (butuh izin pemilik + nomor uji). Akses web via tunnel: ssh -L 18090:127.0.0.1:18090 ...
+
+6. BACKUP / ROLLBACK
+   - Sebelum update: docker compose -f deploy/compose.yaml --env-file deploy/.env exec -T postgres pg_dump -U wa_login wa_login > backup-$(date +%F-%H%M).sql
+     (simpan di /www/docker/wa-login-web/backups, chmod 600). Gateway: backup volume wa-gateway_openwa-data
+     (berisi kredensial session WhatsApp — perlakukan sebagai rahasia) dengan docker run --rm -v ...:/data -v $PWD:/b alpine tar czf /b/openwa-data.tgz -C /data .
+   - Rollback web: RELEASE tag image sebelumnya di deploy/.env lalu `up -d` (image lama tetap ada selama tidak di-prune).
+     Migration OTP bersifat additive; rollback schema (migrate:rollback) TIDAK dijalankan tanpa persetujuan.
+   - Rollback gateway: OPENWA_IMAGE ke tag sebelumnya. JANGAN hapus volume.
+   - Stop hanya project ini: `docker compose ... stop` dari folder project ini. Dilarang prune global / down project lain.
+
+7. BELUM DIVERIFIKASI
+   - Kondisi VPS aktual (port, RAM, disk, folder) — menunggu output langkah A.
+   - Domain, Apache reverse proxy, TLS, mod_remoteip/Cloudflare real IP (DECISIONS D15).
+   - Pairing nomor pengirim dan pengiriman WhatsApp nyata (T13).
+
+8. PEMBARUAN 2026-10-12 (redesign toko + dashboard OpenWA tertanam) — status READY_TO_DEPLOY
+   Perubahan yang berdampak ke deploy:
+   - Container web kini juga join network wa-gateway-net dan memproksi /gateway-api, /gateway-socket ke
+     openwa:2785 (nginx resolver Docker → web tetap start walau gateway mati).
+   - nginx.conf dipasang sebagai TEMPLATE (/etc/nginx/templates, NGINX_ENVSUBST_FILTER=^OPENWA_).
+   - Variabel BARU di wa-login-web/deploy/.env: OPENWA_DASHBOARD_API_KEY.
+   - APP_NAME default → "UG Toko Online Testing".
+   Langkah tambahan di VPS (setelah gateway jalan & sebelum `up -d` web):
+   J. [PC] SSH tunnel ke 127.0.0.1:18091 (seperti §5F), buka dashboard OpenWA bawaan, login API_MASTER_KEY,
+      menu Kunci API → buat key: nama PERSIS "website-dashboard", role admin, tanpa batas sesi.
+      Tempel nilainya HANYA ke /www/docker/wa-login-web/deploy/.env sebagai OPENWA_DASHBOARD_API_KEY= (chmod 600).
+      Jangan pernah memakai API_MASTER_KEY untuk variabel ini.
+   K. [VPS bash] cd /www/docker/wa-login-web && docker compose -f deploy/compose.yaml --env-file deploy/.env up -d --build
+   L. Verifikasi read-only:
+      curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:18090/gateway-api/sessions   → 401 (tanpa login = benar)
+      lalu login admin website di browser → menu WhatsApp Gateway → Dasbor/Sesi tampil tanpa banner merah.
+   Setelah domain aktif: SANCTUM_STATEFUL_DOMAINS WAJIB berisi domain (proxy gateway menolak Origin di luar daftar ini).
+   Rollback: RELEASE ke tag image sebelumnya lalu `up -d`; key "website-dashboard" bisa dicabut di OpenWA.
+
+9. CATATAN WAJIB SETELAH DEPLOY 2026-10-12
+   - JANGAN PERNAH mengubah API_KEY_PEPPER di wa-gateway/deploy/.env setelah gateway pernah jalan: semua API key
+     langsung invalid (kejadian 2026-10-10, diperbaiki dengan reset api_keys — TEST_REPORT R13).
+   - Backup: /www/docker/wa-login-web-backups/<tanggal>/ dan /www/docker/wa-gateway-backups/ (chmod 700/600).
+   - Rollback web cepat: ubah RELEASE=v1-prev di deploy/.env lalu `up -d` (image lama sudah di-tag v1-prev).
+   - Sisa file lama agent lain di root /www/docker/wa-login-web (patch*.js, patch_css*.js, patch_ts.js, m2.sh)
+     tidak dipakai build; dibiarkan (hapus hanya dengan izin pemilik).
