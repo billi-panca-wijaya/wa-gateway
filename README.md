@@ -119,7 +119,11 @@ wa-gateway/
 
 ## 💻 Panduan Integrasi ke Back-Office Laravel
 
-Folder `reference-laravel-client/` telah disediakan agar tim developer back-office dapat langsung menyalin kode ke project Laravel yang ada:
+> 💡 **PENTING: Kapan Konfigurasi Ini Dibutuhkan?**
+> - **Pada website/aplikasi Anda yang sekarang:** Anda **TIDAK PERLU** mengisi variabel `.env` di bawah ini! Laravel dan Gateway Anda sudah menyatu 100% secara otomatis di level internal Docker (`http://openwa:2785`).
+> - **Kapan ini dipakai?** Bagian ini **HANYA** digunakan jika di masa depan Anda memiliki **Aplikasi / Server Lain yang Terpisah** (misal: sistem ERP luar, bot pihak ketiga, atau aplikasi Kasir cabang lain) yang ingin menembak dan memanfaatkan WhatsApp Gateway ini dari server luar melalui REST API.
+
+Folder `reference-laravel-client/` telah disediakan agar tim developer back-office luar dapat langsung menyalin kode ke project Laravel mereka:
 
 ### 1. Salin File ke Laravel Anda
 ```bash

@@ -2,6 +2,11 @@
 
 Paket referensi ini dibuat untuk tim Back-Office Agent (berbasis Laravel) agar dapat langsung di-copy & paste ke dalam codebase Back-Office Laravel.
 
+> 💡 **CATATAN PENTING**:
+> Jika aplikasi Anda sudah berjalan satu server / satu stack Docker dengan Gateway (seperti pada web utama Anda), Anda **tidak perlu token manual** ini karena semua sudah tersambung otomatis secara internal.
+> 
+> Panduan di bawah ini **khusus untuk aplikasi Back-Office / Server LAIN yang berdiri sendiri** (terpisah server) dan ingin menembak WhatsApp Gateway melalui REST API internet.
+
 ---
 
 ## 1. Arsitektur Komunikasi
