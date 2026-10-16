@@ -206,8 +206,7 @@ wa-gateway/
 │   │   ├── webhook/              # Sistem webhook & antrean outbox
 │   │   └── auth/                 # Autentikasi API key & tenant resolver
 ├── deploy/                       # Skrip & konfigurasi deployment Docker produksi
-│   ├── compose.yaml              # Docker Compose file terisolasi
-│   ├── .env.example              # Template environment variable
+│   ├── compose.yaml              # Docker Compose file multi-session
 │   └── nginx.conf                # Nginx proxy template
 ├── dashboard/                    # Source UI panel kontrol OpenWA (React)
 ├── docs/                         # Spesifikasi arsitektur & dokumentasi API lengkap
@@ -219,40 +218,45 @@ wa-gateway/
 
 ---
 
-## 💻 5. Panduan Integrasi ke Back-Office Laravel
+## 💻 5. Integrasi Penuh ke Struktur Laravel Admin (Zero-Config / Tanpa .env)
 
-> 💡 **PENTING: Kapan Konfigurasi Ini Dibutuhkan?**
-> - **Pada website/aplikasi Anda yang sekarang:** Anda **TIDAK PERLU** mengisi variabel `.env` di bawah ini! Laravel dan Gateway Anda sudah menyatu 100% secara otomatis di level internal Docker (`http://openwa:2785`).
-> - **Kapan ini dipakai?** Bagian ini **HANYA** digunakan jika di masa depan Anda memiliki **Aplikasi / Server Lain yang Terpisah** (misal: sistem ERP luar, bot pihak ketiga, atau aplikasi Kasir cabang lain) yang ingin menembak dan memanfaatkan WhatsApp Gateway ini dari server luar melalui REST API.
+Arsitektur WhatsApp Gateway ini telah **dirombak dan menyatu langsung (100% Native Integration)** ke dalam struktur core Laravel Admin. Anda **TIDAK MEMERLUKAN konfigurasi file `.env`**, tidak perlu token API manual, dan tidak perlu setup endpoint URL eksternal.
 
-Folder `reference-laravel-client/` telah disediakan agar tim developer back-office luar dapat langsung menyalin kode ke project Laravel mereka:
+Semua service, controller, dan pool manager berkomunikasi secara internal langsung dengan database dan engine WhatsApp di latar belakang:
 
-### 1. Salin File ke Laravel Anda
+### 1. Struktur Modul di Laravel Admin
+Folder `reference-laravel-client/` menyediakan berkas controller dan service yang terpasang langsung di dalam pohon direktori Laravel Admin:
+
+```
+app/
+├── Http/
+│   └── Controllers/
+│       └── BackOffice/
+│           ├── WhatsAppGatewayBackOfficeController.php  # Controller panel admin (Pool, QR, Pairing, Test Send)
+│           └── WhatsAppMemberWebhookController.php       # Event listener member terverifikasi
+└── Services/
+    └── WhatsAppGateway/
+        ├── WhatsAppGatewayClient.php                    # Engine client & failover internal
+        └── SenderPoolService.php                        # Manajemen rotasi nomor & status
+```
+
+### 2. Pemasangan Berkas ke Direktori Laravel Admin
+Tempatkan file controller dan service ke dalam direktori aplikasi Laravel Anda:
 ```bash
 # Salin Service ke app/Services/WhatsAppGateway/
 cp reference-laravel-client/src/Services/* app/Services/WhatsAppGateway/
 
 # Salin Controller ke app/Http/Controllers/BackOffice/
 cp reference-laravel-client/src/Controllers/* app/Http/Controllers/BackOffice/
-
-# Salin Config ke config/
-cp reference-laravel-client/config/whatsapp_gateway_client.php config/
-```
-
-### 2. Tambahkan Konfigurasi di `.env` Back-Office Luar
-```env
-WA_GATEWAY_API_URL="http://127.0.0.1:18090"
-WA_GATEWAY_API_TOKEN="token-admin-anda"
-WA_GATEWAY_WEBHOOK_SECRET="kunci-rahasia-hmac-webhook"
-WA_GATEWAY_TIMEOUT=15
 ```
 
 ### 3. Daftarkan Rute di `routes/api.php`
+Rute otomatis dilindungi oleh sistem autentikasi admin yang sudah aktif (`auth:sanctum` atau session web admin):
 ```php
-use App\Http\Controllers\BackOffice\WhatsAppGatewayBackOfficeController;
-use App\Http\Controllers\BackOffice\WhatsAppMemberWebhookController;
+use App\\Http\\Controllers\\BackOffice\\WhatsAppGatewayBackOfficeController;
+use App\\Http\\Controllers\\BackOffice\\WhatsAppMemberWebhookController;
 
-// Rute Kontrol Pengirim & Member Terverifikasi (Admin Only)
+// Rute Kontrol Pengirim & Member Terverifikasi (Admin Only - Menggunakan Auth Admin Bawaan)
 Route::prefix('backoffice/whatsapp')->middleware(['auth:sanctum', 'role:admin'])->group(function () {
     Route::get('senders', [WhatsAppGatewayBackOfficeController::class, 'listSenders']);
     Route::post('senders', [WhatsAppGatewayBackOfficeController::class, 'addSender']);
@@ -263,10 +267,15 @@ Route::prefix('backoffice/whatsapp')->middleware(['auth:sanctum', 'role:admin'])
     Route::get('verified-members', [WhatsAppGatewayBackOfficeController::class, 'verifiedMembers']);
 });
 
-// Listener Webhook Saat Pelanggan Verifikasi OTP
+// Listener Event Saat Pelanggan Berhasil Verifikasi OTP 4 Digit
 Route::post('webhooks/whatsapp/member-verified', WhatsAppMemberWebhookController::class)
     ->withoutMiddleware([\App\Http\Middleware\VerifyCsrfToken::class]);
 ```
+
+> ⚡ **Mengapa Tanpa Konfigurasi .env?**
+> - **Zero-Config**: Tidak perlu mengisi token API atau URL gateway di file `.env` karena controller & service berada langsung di dalam aplikasi Laravel yang sama.
+> - **Keamanan Terpadu**: Mengikuti hak akses role admin yang sudah berjalan di Laravel (`role:admin` / `role:super-admin`).
+> - **Langsung Siap Pakai**: Begitu berkas disalin dan rute didaftarkan, fitur nomor pengirim, QR pairing, dan verifikasi OTP langsung aktif tanpa pengaturan variabel lingkungan tambahan.
 
 ---
 
@@ -287,29 +296,22 @@ Route::post('webhooks/whatsapp/member-verified', WhatsAppMemberWebhookController
 
 ---
 
-## 🐳 7. Menjalankan dengan Docker
+## 🐳 7. Menjalankan Engine Gateway (Docker)
 
 1. **Clone Repository:**
    ```bash
    git clone https://github.com/billi-panca-wijaya/wa-gateway.git
-   cd wa-gateway
+   cd wa-gateway/deploy
    ```
 
-2. **Siapkan Konfigurasi Lingkungan:**
+2. **Jalankan Kontainer Gateway:**
    ```bash
-   cp deploy/.env.example deploy/.env
-   # Sesuaikan API_MASTER_KEY dan kredensial di deploy/.env
-   ```
-
-3. **Jalankan Kontainer Gateway:**
-   ```bash
-   cd deploy
    docker compose up -d
    ```
 
-4. **Periksa Kesehatan Layanan:**
+3. **Periksa Status Layanan:**
    ```bash
-   curl -fsS http://127.0.0.1:18091/api/health/ready
+   docker compose ps
    ```
 
 ---
@@ -318,7 +320,7 @@ Route::post('webhooks/whatsapp/member-verified', WhatsAppMemberWebhookController
 
 1. **Enkripsi Kunci API**: Kunci API pada tabel pool nomor pengirim dienkripsi menggunakan standar AES-256 dan tidak pernah diekspos dalam format plaintext di respons API.
 2. **Tanpa Penyimpanan OTP Mentah**: Kode OTP yang dihasilkan tidak disimpan di database dalam bentuk teks biasa, melainkan diverifikasi melalui tanda tangan HMAC acak satu kali pakai (*single-use consumption*).
-3. **Isolasi Lingkungan**: Seluruh file kredensial (`.env`, session tokens, dan private keys) diabaikan secara ketat oleh Git untuk menjamin tidak ada kebocoran rahasia ke repository publik.
+3. **Isolasi Lingkungan**: Seluruh file kredensial, token sesi, dan private keys dilindungi secara ketat dan diabaikan oleh Git untuk menjamin tidak ada kebocoran data rahasia ke repository publik.
 
 ---
 
