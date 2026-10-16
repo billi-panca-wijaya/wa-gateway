@@ -89,3 +89,11 @@ _docs/
 .superpowers/
 # TypeScript incremental build cache (tsc writes this at repo root under the TS6 build config)
 *.tsbuildinfo
+
+# PRD and handoff documentation
+*.prd
+**/*.prd
+handoff.md
+HANDOFF.md
+*handoff*.md
+*HANDOFF*.md

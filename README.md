@@ -210,9 +210,6 @@ wa-gateway/
 │   └── nginx.conf                # Nginx proxy template
 ├── dashboard/                    # Source UI panel kontrol OpenWA (React)
 ├── docs/                         # Spesifikasi arsitektur & dokumentasi API lengkap
-├── API_CONTRACT.prd              # Kontrak endpoint REST API gateway
-├── DEPLOYMENT.prd                # Panduan deployment VPS
-├── HANDOFF.prd                   # Dokumen riwayat transisi & arsitektur sistem
 └── README.md                     # Dokumentasi utama proyek
 ```
 
