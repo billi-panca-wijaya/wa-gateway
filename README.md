@@ -1,7 +1,7 @@
 # WhatsApp Gateway & Back-Office Integration Engine
 
 <p align="center">
-  <strong>High-Performance WhatsApp Gateway Infrastructure with Multi-Sender Pool, Auto-Failover, and Zero-Config Laravel Admin Integration</strong>
+  <strong>Lightweight WhatsApp Gateway Infrastructure with Multi-Sender Pool, Auto-Failover, and Zero-Config Laravel Admin Integration</strong>
 </p>
 
 <p align="center">
@@ -11,7 +11,6 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Author-Billi%20Panca%20Wijaya-25d366?style=for-the-badge&logo=whatsapp&logoColor=white" alt="Author"/>
-  <img src="https://img.shields.io/badge/Node-22%20LTS-brightgreen?style=for-the-badge&logo=node.js" alt="Node"/>
   <img src="https://img.shields.io/badge/Laravel-11%20Native%20Ready-ff2d20?style=for-the-badge&logo=laravel" alt="Laravel"/>
   <img src="https://img.shields.io/badge/Docker-Production%20Ready-2496ed?style=for-the-badge&logo=docker" alt="Docker"/>
   <img src="https://img.shields.io/badge/License-MIT-blue?style=for-the-badge" alt="License"/>
@@ -21,13 +20,11 @@
 
 ## 📌 Project Overview
 
-This repository provides an enterprise-grade **WhatsApp Gateway Engine** specifically refactored, optimized, and unified for **Back-Office and online transaction integration** (Member Authentication, OTP, Order Notifications, and Customer Portals).
+This repository provides an enterprise-ready **WhatsApp Gateway Engine & Laravel Integration Package** specifically optimized for **Back-Office operations and transactional workflows** (Member Authentication, 4-Digit OTP, Order Notifications, and Customer Portals).
 
-Unlike isolated standalone panels that operate as disconnected services, this project is engineered as an **integrated headless infrastructure** designed to blend directly into your Laravel Admin architecture:
-* **Zero-Config Native Integration**: Controller and service modules (`reference-laravel-client/`) reside directly inside your Laravel codebase. No external `.env` API tokens or public gateway URLs required.
-* **Multi-Sender Pool & Auto-Failover**: Connect multiple WhatsApp numbers concurrently. The engine rotates dispatches (Round-Robin) and instantly fails over to backup senders if one number experiences rate limits or network disconnections.
-* **4-Digit Zero-Leak WhatsApp OTP**: Fast, frictionless 4-digit numeric verification with stateless HMAC-SHA256 verifiers (no plaintext OTP stored in database) and automatic recovery for soft-deleted accounts.
-* **Realtime Pairing with Auto-Dismiss Modal**: Connect WhatsApp numbers via standard QR Code scanning or 8-digit linking codes. The UI automatically senses when the phone connects (`ready/working`) and dismisses the popup instantly.
+Unlike bloated monolithic stacks that require compiling JavaScript or maintaining heavy build tools, this project has been streamlined into two clean components:
+1. **Zero-Config Docker Engine** (`docker-compose.yml`): A single, lightweight container running the headless WhatsApp socket engine (Baileys) via prebuilt image. No local Node.js compilation required.
+2. **Native Laravel Package** (`reference-laravel-client/`): Complete, drop-in Laravel services, controllers, migrations, and routes. No extra `.env` API tokens or external URLs needed.
 
 ---
 
@@ -42,11 +39,11 @@ flowchart TD
     classDef gateway fill:#18181b,stroke:#25d366,stroke-width:2px,color:#fff;
     classDef enduser fill:#064e3b,stroke:#34d399,stroke-width:2px,color:#fff;
 
-    subgraph PLATFORM_LAYER ["1. PLATFORM ENGINE CORE (LARAVEL BACKEND)"]
+    subgraph PLATFORM_LAYER ["1. LARAVEL CORE BACKEND (PHP)"]
         direction TB
         B1["WhatsApp OTP Service<br/>(4-Digit OTP, HMAC-SHA256, Auto-Restore)"]:::platform
         B2["Multi-Sender Pool Manager<br/>(Load Balancing & Failover Engine)"]:::platform
-        B3["Webhook & Event Dispatcher<br/>(member.verified HMAC Notification)"]:::platform
+        B3["Webhook & Event Dispatcher<br/>(member.verified Notification)"]:::platform
     end
 
     subgraph OPERATOR_LAYER ["2. OPERATOR & STOREFRONT (PORTAL APPS)"]
@@ -55,9 +52,9 @@ flowchart TD
         O2["End-User Storefront<br/>(Customer Signs In via WA OTP)"]:::operator
     end
 
-    subgraph GATEWAY_LAYER ["3. WHATSAPP GATEWAY ENGINE (OPENWA CORE)"]
+    subgraph GATEWAY_LAYER ["3. WHATSAPP GATEWAY ENGINE (DOCKER)"]
         direction TB
-        G1["Gateway REST API & Socket Controller"]:::gateway
+        G1["Gateway REST API & Socket Controller<br/>(http://openwa:2785)"]:::gateway
         subgraph ACTIVE_POOL ["Connected Sender Sockets"]
             S1["Sender 1: Primary WhatsApp Number"]:::gateway
             S2["Sender 2: Standby Backup Number (Failover)"]:::gateway
@@ -72,7 +69,7 @@ flowchart TD
     O2 -->|"1. Request OTP / Sign In"| B1
     O1 -->|"Pair Numbers & Monitor Status"| B2
     B1 -->|"2. Select Available Sender"| B2
-    B2 -->|"3. Dispatch Message"| G1
+    B2 -->|"3. Dispatch Message via HTTP"| G1
     G1 -->|"Socket Route"| S1 & S2
     S1 & S2 -->|"4. Deliver Message to Handset"| W1
     W1 -.->|"5. Customer Receives 4-Digit Code"| O2
@@ -82,7 +79,7 @@ flowchart TD
 
 ---
 
-## 🔄 2. Clear Operational Workflows (Step-by-Step)
+## 🔄 2. Operational Workflows (Step-by-Step)
 
 ### A. 4-Digit OTP Login & Verification Flow
 How customers sign in swiftly without remembering complex passwords:
@@ -183,33 +180,24 @@ sequenceDiagram
 * **8-Digit Pairing Code**: Link using phone number notifications without needing a camera.
 * **Auto-Dismiss UI**: The pairing modal automatically detects connected status and closes itself.
 
-### 4. 🎨 Modern Dark OpenWA Dashboard
-* Built with a sleek dark aesthetic, WhatsApp Green (`#25d366`) accents, and ultra-thin custom scrollbars.
-* Unified into **"WhatsApp Sessions & Senders"**, keeping sensitive infrastructure settings hidden in the background.
-
 ---
 
-## 📂 4. Directory Structure
+## 📂 4. Clean Directory Structure
 
 ```
 wa-gateway/
-├── reference-laravel-client/     # 🌟 Ready-to-use Laravel Admin client module
+├── docker-compose.yml            # 🐳 Zero-config Docker stack to run WhatsApp Engine
+├── reference-laravel-client/     # 🌟 Complete Laravel Integration Package
+│   ├── config/
+│   │   └── whatsapp_otp.php      # Laravel configuration
+│   ├── database/migrations/      # Database migrations (sender_pool & otp_challenges)
 │   ├── src/
-│   │   ├── Services/             # WhatsAppGatewayClient.php (Internal Caller & Failover)
-│   │   └── Controllers/          # BackOffice & Webhook Controllers
-│   └── README.md                 # Laravel client quickstart
-├── src/                          # Core WhatsApp Gateway Engine (NestJS + TypeScript)
-│   ├── modules/
-│   │   ├── session/              # WhatsApp session lifecycle (Baileys)
-│   │   ├── message/              # Text, media, and template dispatching
-│   │   ├── webhook/              # Webhook processing & outbox queue
-│   │   └── auth/                 # API key authentication & tenant routing
-├── deploy/                       # Production Docker deployment
-│   ├── compose.yaml              # Docker Compose multi-session stack
-│   └── nginx.conf                # Nginx proxy configuration
-├── dashboard/                    # React control panel source
-├── docs/                         # Architecture documentation & API references
-└── README.md                     # Main documentation (English)
+│   │   ├── Controllers/          # WhatsAppOtpController, SenderPoolController, etc.
+│   │   └── Services/WhatsAppOtp/ # OtpService, SenderPoolService, PooledTransport, etc.
+│   └── README.md                 # Laravel installation guide
+├── README.md                     # Main documentation (English)
+├── README.id.md                  # Main documentation (Bahasa Indonesia)
+└── LICENSE                       # MIT License
 ```
 
 ---
@@ -218,92 +206,89 @@ wa-gateway/
 
 The WhatsApp Gateway is designed for **Zero-Config Native Integration** directly within your Laravel backend. You **DO NOT NEED** extra `.env` tokens, manual API keys, or external gateway URLs.
 
-### 1. Module Placement in Laravel
-Place the reference files into your Laravel application tree:
-```
-app/
-├── Http/
-│   └── Controllers/
-│       └── BackOffice/
-│           ├── WhatsAppGatewayBackOfficeController.php  # Admin panel controller
-│           └── WhatsAppMemberWebhookController.php       # Verified member event listener
-└── Services/
-    └── WhatsAppGateway/
-        ├── WhatsAppGatewayClient.php                    # Internal caller & failover service
-        └── SenderPoolService.php                        # Pool rotation and status service
-```
-
-### 2. Copy Module Files
+### 1. Copy Package Files to Laravel
 ```bash
-# Copy Services to app/Services/WhatsAppGateway/
-cp reference-laravel-client/src/Services/* app/Services/WhatsAppGateway/
+# 1. Copy Config
+cp reference-laravel-client/config/whatsapp_otp.php config/
 
-# Copy Controllers to app/Http/Controllers/BackOffice/
-cp reference-laravel-client/src/Controllers/* app/Http/Controllers/BackOffice/
+# 2. Copy Database Migrations
+cp reference-laravel-client/database/migrations/* database/migrations/
+
+# 3. Copy Services
+cp -r reference-laravel-client/src/Services/WhatsAppOtp app/Services/
+
+# 4. Copy Controllers
+cp reference-laravel-client/src/Controllers/WhatsAppOtpController.php app/Http/Controllers/Api/
+cp reference-laravel-client/src/Controllers/SenderPoolController.php app/Http/Controllers/Api/Admin/
+cp reference-laravel-client/src/Controllers/VerifiedMembersController.php app/Http/Controllers/Api/Admin/
+cp reference-laravel-client/src/Controllers/WhatsAppMemberWebhookController.php app/Http/Controllers/Api/
+```
+
+### 2. Run Database Migrations
+```bash
+php artisan migrate
 ```
 
 ### 3. Register Routes in `routes/api.php`
-Leverage your existing Laravel Sanctum session authentication:
 ```php
-use App\Http\Controllers\BackOffice\WhatsAppGatewayBackOfficeController;
-use App\Http\Controllers\BackOffice\WhatsAppMemberWebhookController;
+use App\Http\Controllers\Api\WhatsAppOtpController;
+use App\Http\Controllers\Api\Admin\SenderPoolController;
+use App\Http\Controllers\Api\Admin\VerifiedMembersController;
+use App\Http\Controllers\Api\WhatsAppMemberWebhookController;
 
-// Back-Office Sender Management (Admin Only)
-Route::prefix('backoffice/whatsapp')->middleware(['auth:sanctum', 'role:admin'])->group(function () {
-    Route::get('senders', [WhatsAppGatewayBackOfficeController::class, 'listSenders']);
-    Route::post('senders', [WhatsAppGatewayBackOfficeController::class, 'addSender']);
-    Route::post('senders/{id}/toggle', [WhatsAppGatewayBackOfficeController::class, 'toggleSender']);
-    Route::get('senders/{id}/qr', [WhatsAppGatewayBackOfficeController::class, 'getQrCode']);
-    Route::post('senders/{id}/pairing-code', [WhatsAppGatewayBackOfficeController::class, 'requestPairingCode']);
-    Route::post('senders/{id}/test-send', [WhatsAppGatewayBackOfficeController::class, 'testSend']);
-    Route::get('verified-members', [WhatsAppGatewayBackOfficeController::class, 'verifiedMembers']);
+// 1. Customer OTP Endpoints
+Route::prefix('auth/whatsapp')->middleware('throttle:60,1')->group(function () {
+    Route::post('request-otp', [WhatsAppOtpController::class, 'requestOtp']);
+    Route::post('verify-otp', [WhatsAppOtpController::class, 'verifyOtp']);
+    Route::post('resend-otp', [WhatsAppOtpController::class, 'resendOtp']);
 });
 
-// Realtime Event Listener for Verified Members
+// 2. Admin Back-Office Senders Management
+Route::prefix('admin/sender-pool')
+    ->middleware(['auth:sanctum', 'role:super-admin|admin'])
+    ->controller(SenderPoolController::class)
+    ->group(function () {
+        Route::get('/', 'index');
+        Route::post('/', 'store');
+        Route::get('{id}', 'show');
+        Route::post('{id}/toggle', 'toggle');
+        Route::post('{id}/sync', 'sync');
+        Route::get('{id}/qr', 'qr');
+        Route::post('{id}/pairing-code', 'pairingCode');
+        Route::post('{id}/test-send', 'testSend');
+        Route::delete('{id}', 'destroy');
+    });
+
+// 3. Verified Members Directory
+Route::prefix('admin/verified-members')
+    ->middleware(['auth:sanctum', 'role:super-admin|admin'])
+    ->controller(VerifiedMembersController::class)
+    ->group(function () {
+        Route::get('/', 'index');
+        Route::get('{id}', 'show');
+    });
+
+// 4. Realtime Webhook Listener for Verified Members
 Route::post('webhooks/whatsapp/member-verified', WhatsAppMemberWebhookController::class)
     ->withoutMiddleware([\App\Http\Middleware\VerifyCsrfToken::class]);
 ```
 
 ---
 
-## 🛠️ 6. API Endpoint Catalog
+## 🐳 6. Running the WhatsApp Engine (Docker)
 
-| Method | Endpoint | Description |
-|---|---|---|
-| `GET` | `/api/v1/admin/sender-pool` | Retrieve all WhatsApp senders with rotation metrics and states |
-| `POST` | `/api/v1/admin/sender-pool` | Register a new sender session (`session_id`, `label`) |
-| `GET` | `/api/v1/admin/sender-pool/{id}` | Sender detail with live socket state from engine |
-| `DELETE` | `/api/v1/admin/sender-pool/{id}` | Remove a sender from rotation |
-| `POST` | `/api/v1/admin/sender-pool/{id}/toggle` | Pause or resume a sender from rotation |
-| `POST` | `/api/v1/admin/sender-pool/{id}/sync` | Synchronize live phone number and connection status |
-| `GET` | `/api/v1/admin/sender-pool/{id}/qr` | Fetch base64 PNG QR code for pairing |
-| `POST` | `/api/v1/admin/sender-pool/{id}/pairing-code` | Request 8-digit pairing code for a mobile number |
-| `POST` | `/api/v1/admin/sender-pool/{id}/test-send` | Dispatch a test message from this specific sender |
-| `GET` | `/api/v1/admin/verified-members` | Paginated directory of verified WhatsApp members |
+To launch the background WhatsApp Baileys socket engine, simply run:
+
+```bash
+docker compose up -d
+```
+
+* That's it! No `.env` setup or Node.js compilation required.
+* The container will automatically start and expose the private WhatsApp socket interface at `http://localhost:18091` (and `http://openwa:2785` in the Docker bridge network).
 
 ---
 
-## 🐳 7. Running the Gateway Engine (Docker)
-
-1. **Clone the Repository:**
-   ```bash
-   git clone https://github.com/billi-panca-wijaya/wa-gateway.git
-   cd wa-gateway/deploy
-   ```
-
-2. **Launch Gateway Containers:**
-   ```bash
-   docker compose up -d
-   ```
-
-3. **Verify Service Health:**
-   ```bash
-   docker compose ps
-   ```
-
----
-
-## 🔒 8. Security & Data Protection
+## 🔒 7. Security & Data Protection
 
 1. **Encrypted Credentials**: API keys stored in the sender pool table are encrypted using AES-256 (`Crypt::encryptString`) and never returned in plaintext API responses.
 2. **Stateless HMAC Verifiers**: OTP codes are verified through one-time HMAC-SHA256 digests and are never stored in plaintext database fields.

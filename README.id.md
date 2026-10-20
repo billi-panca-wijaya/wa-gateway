@@ -1,7 +1,7 @@
 # WhatsApp Gateway & Back-Office Integration Engine
 
 <p align="center">
-  <strong>Infrastruktur WhatsApp Gateway Performa Tinggi dengan Multi-Sender Pool, Auto-Failover, dan Integrasi Native Laravel Admin</strong>
+  <strong>Infrastruktur WhatsApp Gateway Ringan dengan Multi-Sender Pool, Auto-Failover, dan Integrasi Native Laravel Admin</strong>
 </p>
 
 <p align="center">
@@ -11,7 +11,6 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Author-Billi%20Panca%20Wijaya-25d366?style=for-the-badge&logo=whatsapp&logoColor=white" alt="Author"/>
-  <img src="https://img.shields.io/badge/Node-22%20LTS-brightgreen?style=for-the-badge&logo=node.js" alt="Node"/>
   <img src="https://img.shields.io/badge/Laravel-11%20Native%20Ready-ff2d20?style=for-the-badge&logo=laravel" alt="Laravel"/>
   <img src="https://img.shields.io/badge/Docker-Production%20Ready-2496ed?style=for-the-badge&logo=docker" alt="Docker"/>
   <img src="https://img.shields.io/badge/License-MIT-blue?style=for-the-badge" alt="License"/>
@@ -21,13 +20,11 @@
 
 ## 📌 Ringkasan Proyek
 
-Repository ini merupakan **WhatsApp Gateway Engine** kelas enterprise yang telah dirombak, dioptimasi, dan disesuaikan secara khusus untuk kebutuhan **integrasi Back-Office dan sistem transaksi online** (Autentikasi Member, OTP 4 Digit, Notifikasi Pesanan, dan Portal Pelanggan).
+Repository ini menyediakan **WhatsApp Gateway Engine & Paket Integrasi Laravel** siap pakai yang dioptimalkan khusus untuk **operasional Back-Office dan alur transaksi** (Autentikasi Member, OTP 4 Digit, Notifikasi Pesanan, dan Portal Pelanggan).
 
-Berbeda dari gateway mandiri standar yang berjalan sebagai panel terpisah (*isolated standalone panel*), arsitektur pada repositori ini dirancang sebagai **fondasi infrastruktur *headless*** yang menyatu langsung ke sistem Laravel Admin:
-* **Zero-Config Integrasi Native**: Modul controller dan service (`reference-laravel-client/`) langsung ditempatkan di dalam struktur Laravel Anda. Tidak perlu konfigurasi token API manual atau URL `.env` eksternal.
-* **Multi-Sender Pool & Auto-Failover**: Mendukung banyak nomor WhatsApp sekaligus. Sistem membagi beban pengiriman (*Round-Robin*) dan seketika beralih ke nomor cadangan jika nomor utama mengalami limit atau gangguan.
-* **OTP WhatsApp 4 Digit Aman (Zero-Leak)**: Verifikasi 4 digit angka yang cepat dan ramah pengguna dengan verifier stateless HMAC-SHA256 (tanpa menyimpan kode OTP mentah di database) serta pemulihan otomatis (*auto-restore*) untuk akun yang terhapus saat pengujian.
-* **Pairing Realtime dengan Auto-Close Modal**: Menghubungkan nomor WhatsApp melalui Scan QR Code atau 8-digit Kode Tautan. Tampilan popup secara otomatis mendeteksi koneksi aktif (`ready/working`) dan menutup sendiri seketika.
+Berbeda dari tumpukan kode yang rumit dan membutuhkan kompilasi JavaScript, repositori ini telah disederhanakan murni menjadi dua bagian:
+1. **Engine Docker Zero-Config** (`docker-compose.yml`): Satu file Docker Compose yang langsung menjalankan engine socket WhatsApp (Baileys) dari image resmi siap pakai tanpa perlu kompilasi Node.js lokal.
+2. **Paket Native Laravel** (`reference-laravel-client/`): Berkas service, controller, migration, dan konfigurasi yang siap disalin langsung ke dalam aplikasi Laravel perusahaan Anda tanpa perlu token API eksternal atau URL `.env`.
 
 ---
 
@@ -42,11 +39,11 @@ flowchart TD
     classDef gateway fill:#18181b,stroke:#25d366,stroke-width:2px,color:#fff;
     classDef enduser fill:#064e3b,stroke:#34d399,stroke-width:2px,color:#fff;
 
-    subgraph PLATFORM_LAYER ["1. CORE SISTEM BACKEND (LARAVEL)"]
+    subgraph PLATFORM_LAYER ["1. CORE SISTEM LARAVEL (PHP)"]
         direction TB
         B1["WhatsApp OTP Service<br/>(OTP 4 Digit, HMAC-SHA256, Auto-Restore)"]:::platform
         B2["Multi-Sender Pool Manager<br/>(Rotasi Beban & Engine Failover)"]:::platform
-        B3["Webhook & Event Dispatcher<br/>(Notifikasi member.verified HMAC)"]:::platform
+        B3["Webhook & Event Dispatcher<br/>(Notifikasi member.verified)"]:::platform
     end
 
     subgraph OPERATOR_LAYER ["2. ANTARMUKA PENGELOLA & PENGGUNA (FRONTEND)"]
@@ -55,9 +52,9 @@ flowchart TD
         O2["Etalase Web Toko / Portal<br/>(Pelanggan Login via OTP WA)"]:::operator
     end
 
-    subgraph GATEWAY_LAYER ["3. MESIN WHATSAPP GATEWAY (OPENWA CORE)"]
+    subgraph GATEWAY_LAYER ["3. MESIN WHATSAPP GATEWAY (DOCKER)"]
         direction TB
-        G1["Gateway REST API & Socket Controller"]:::gateway
+        G1["Gateway REST API & Socket Controller<br/>(http://openwa:2785)"]:::gateway
         subgraph ACTIVE_POOL ["Kolam Sesi WhatsApp Terhubung"]
             S1["Pengirim 1: Nomor WhatsApp Utama"]:::gateway
             S2["Pengirim 2: Nomor Cadangan (Failover)"]:::gateway
@@ -72,7 +69,7 @@ flowchart TD
     O2 -->|"1. Minta OTP / Login"| B1
     O1 -->|"Hubungkan Nomor & Pantau Status"| B2
     B1 -->|"2. Pilih Nomor Pengirim yang Ready"| B2
-    B2 -->|"3. Teruskan Pesan ke Engine"| G1
+    B2 -->|"3. Teruskan Pesan via HTTP"| G1
     G1 -->|"Rotasi Sesi Aktif"| S1 & S2
     S1 & S2 -->|"4. Kirim Pesan ke HP"| W1
     W1 -.->|"5. Pelanggan Menerima Kode 4 Digit"| O2
@@ -183,33 +180,24 @@ sequenceDiagram
 * **Kode Tautan 8 Karakter**: Menghubungkan nomor via notifikasi WhatsApp di HP tanpa kamera.
 * **Auto-Dismiss UI**: Modal pairing otomatis mendeteksi koneksi aktif dan menutup sendiri.
 
-### 4. 🎨 Tampilan Terpadu Bergaya OpenWA
-* Dirancang dengan estetika *sleek dark mode*, aksen hijau WhatsApp (`#25d366`), dan scrollbar kustom *ultra-thin* (6px).
-* Menu terpadu **"Sesi & Nomor Pengirim WA"**, menjaga pengaturan internal server tersembunyi di latar belakang.
-
 ---
 
-## 📂 4. Struktur Direktori Proyek
+## 📂 4. Struktur Direktori Proyek yang Bersih
 
 ```
 wa-gateway/
-├── reference-laravel-client/     # 🌟 Modul referensi siap pakai untuk Laravel Admin
+├── docker-compose.yml            # 🐳 Zero-config Docker stack untuk menjalankan Engine WhatsApp
+├── reference-laravel-client/     # 🌟 Paket integrasi lengkap siap pakai untuk Laravel
+│   ├── config/
+│   │   └── whatsapp_otp.php      # File konfigurasi Laravel
+│   ├── database/migrations/      # Migration database (sender_pool & otp_challenges)
 │   ├── src/
-│   │   ├── Services/             # WhatsAppGatewayClient.php (Internal Caller & Failover)
-│   │   └── Controllers/          # BackOffice & Webhook Controllers
-│   └── README.md                 # Panduan cepat Laravel client
-├── src/                          # Core WhatsApp Gateway Engine (NestJS + TypeScript)
-│   ├── modules/
-│   │   ├── session/              # Manajemen sesi WhatsApp (Baileys)
-│   │   ├── message/              # Pengiriman pesan teks, media, dan template
-│   │   ├── webhook/              # Pengolahan webhook & antrean outbox
-│   │   └── auth/                 # Autentikasi API key & tenant routing
-├── deploy/                       # Skrip deployment Docker produksi
-│   ├── compose.yaml              # Docker Compose multi-session stack
-│   └── nginx.conf                # Konfigurasi proxy Nginx
-├── dashboard/                    # Source UI panel kontrol OpenWA (React)
-├── docs/                         # Dokumentasi arsitektur & spesifikasi API
-└── README.md                     # Dokumentasi utama proyek
+│   │   ├── Controllers/          # Controller WhatsAppOtpController, SenderPoolController, dll
+│   │   └── Services/WhatsAppOtp/ # Service OtpService, SenderPoolService, PooledTransport, dll
+│   └── README.md                 # Panduan instalasi ke Laravel
+├── README.md                     # Dokumentasi utama (Bahasa Inggris)
+├── README.id.md                  # Dokumentasi utama (Bahasa Indonesia)
+└── LICENSE                       # Lisensi MIT
 ```
 
 ---
@@ -218,92 +206,89 @@ wa-gateway/
 
 Modul ini dirancang untuk **Integrasi Native Zero-Config** langsung di dalam backend Laravel Anda. Anda **TIDAK PERLU** token API tambahan, kunci rahasia manual, atau URL `.env` eksternal.
 
-### 1. Struktur Penempatan Berkas di Laravel
-Tempatkan file controller dan service ke dalam direktori aplikasi Laravel Anda:
-```
-app/
-├── Http/
-│   └── Controllers/
-│       └── BackOffice/
-│           ├── WhatsAppGatewayBackOfficeController.php  # Controller panel admin
-│           └── WhatsAppMemberWebhookController.php       # Event listener member terverifikasi
-└── Services/
-    └── WhatsAppGateway/
-        ├── WhatsAppGatewayClient.php                    # Service pemanggil internal & failover
-        └── SenderPoolService.php                        # Service rotasi pool nomor WhatsApp
-```
-
-### 2. Salin Berkas Modul
+### 1. Salin Berkas Paket ke Laravel Anda
 ```bash
-# Salin Service ke app/Services/WhatsAppGateway/
-cp reference-laravel-client/src/Services/* app/Services/WhatsAppGateway/
+# 1. Salin Konfigurasi
+cp reference-laravel-client/config/whatsapp_otp.php config/
 
-# Salin Controller ke app/Http/Controllers/BackOffice/
-cp reference-laravel-client/src/Controllers/* app/Http/Controllers/BackOffice/
+# 2. Salin Migration Database
+cp reference-laravel-client/database/migrations/* database/migrations/
+
+# 3. Salin Services
+cp -r reference-laravel-client/src/Services/WhatsAppOtp app/Services/
+
+# 4. Salin Controllers
+cp reference-laravel-client/src/Controllers/WhatsAppOtpController.php app/Http/Controllers/Api/
+cp reference-laravel-client/src/Controllers/SenderPoolController.php app/Http/Controllers/Api/Admin/
+cp reference-laravel-client/src/Controllers/VerifiedMembersController.php app/Http/Controllers/Api/Admin/
+cp reference-laravel-client/src/Controllers/WhatsAppMemberWebhookController.php app/Http/Controllers/Api/
+```
+
+### 2. Jalankan Migration Database
+```bash
+php artisan migrate
 ```
 
 ### 3. Daftarkan Rute di `routes/api.php`
-Memanfaatkan autentikasi sesi admin yang sudah aktif:
 ```php
-use App\Http\Controllers\BackOffice\WhatsAppGatewayBackOfficeController;
-use App\Http\Controllers\BackOffice\WhatsAppMemberWebhookController;
+use App\Http\Controllers\Api\WhatsAppOtpController;
+use App\Http\Controllers\Api\Admin\SenderPoolController;
+use App\Http\Controllers\Api\Admin\VerifiedMembersController;
+use App\Http\Controllers\Api\WhatsAppMemberWebhookController;
 
-// Rute Kontrol Pengirim & Member Terverifikasi (Admin Only)
-Route::prefix('backoffice/whatsapp')->middleware(['auth:sanctum', 'role:admin'])->group(function () {
-    Route::get('senders', [WhatsAppGatewayBackOfficeController::class, 'listSenders']);
-    Route::post('senders', [WhatsAppGatewayBackOfficeController::class, 'addSender']);
-    Route::post('senders/{id}/toggle', [WhatsAppGatewayBackOfficeController::class, 'toggleSender']);
-    Route::get('senders/{id}/qr', [WhatsAppGatewayBackOfficeController::class, 'getQrCode']);
-    Route::post('senders/{id}/pairing-code', [WhatsAppGatewayBackOfficeController::class, 'requestPairingCode']);
-    Route::post('senders/{id}/test-send', [WhatsAppGatewayBackOfficeController::class, 'testSend']);
-    Route::get('verified-members', [WhatsAppGatewayBackOfficeController::class, 'verifiedMembers']);
+// 1. Endpoint Login / OTP Pelanggan
+Route::prefix('auth/whatsapp')->middleware('throttle:60,1')->group(function () {
+    Route::post('request-otp', [WhatsAppOtpController::class, 'requestOtp']);
+    Route::post('verify-otp', [WhatsAppOtpController::class, 'verifyOtp']);
+    Route::post('resend-otp', [WhatsAppOtpController::class, 'resendOtp']);
 });
 
-// Listener Event Saat Pelanggan Berhasil Verifikasi OTP
+// 2. Endpoint Panel Admin Pengelola Nomor WhatsApp
+Route::prefix('admin/sender-pool')
+    ->middleware(['auth:sanctum', 'role:super-admin|admin'])
+    ->controller(SenderPoolController::class)
+    ->group(function () {
+        Route::get('/', 'index');
+        Route::post('/', 'store');
+        Route::get('{id}', 'show');
+        Route::post('{id}/toggle', 'toggle');
+        Route::post('{id}/sync', 'sync');
+        Route::get('{id}/qr', 'qr');
+        Route::post('{id}/pairing-code', 'pairingCode');
+        Route::post('{id}/test-send', 'testSend');
+        Route::delete('{id}', 'destroy');
+    });
+
+// 3. Daftar Member Terverifikasi
+Route::prefix('admin/verified-members')
+    ->middleware(['auth:sanctum', 'role:super-admin|admin'])
+    ->controller(VerifiedMembersController::class)
+    ->group(function () {
+        Route::get('/', 'index');
+        Route::get('{id}', 'show');
+    });
+
+// 4. Webhook Realtime Member Terverifikasi
 Route::post('webhooks/whatsapp/member-verified', WhatsAppMemberWebhookController::class)
     ->withoutMiddleware([\App\Http\Middleware\VerifyCsrfToken::class]);
 ```
 
 ---
 
-## 🛠️ 6. Katalog API Endpoints Gateway
+## 🐳 6. Menjalankan Engine WhatsApp (Docker)
 
-| Method | Endpoint | Deskripsi |
-|---|---|---|
-| `GET` | `/api/v1/admin/sender-pool` | Mengambil seluruh daftar nomor WhatsApp di pool beserta status dan statistik rotasi |
-| `POST` | `/api/v1/admin/sender-pool` | Menambahkan nomor/sesi baru (`session_id`, `label`) |
-| `GET` | `/api/v1/admin/sender-pool/{id}` | Detail nomor + status live dari container OpenWA |
-| `DELETE` | `/api/v1/admin/sender-pool/{id}` | Menghapus nomor dari pool rotasi |
-| `POST` | `/api/v1/admin/sender-pool/{id}/toggle` | Menunda (*pause*) atau mengaktifkan kembali nomor |
-| `POST` | `/api/v1/admin/sender-pool/{id}/sync` | Sinkronisasi status dan nomor telepon live dari engine |
-| `GET` | `/api/v1/admin/sender-pool/{id}/qr` | Mengambil data QR code (base64 PNG) untuk scan pairing |
-| `POST` | `/api/v1/admin/sender-pool/{id}/pairing-code` | Meminta 8-digit kode pairing WhatsApp via nomor HP |
-| `POST` | `/api/v1/admin/sender-pool/{id}/test-send` | Mengirim pesan WhatsApp uji coba dari nomor pengirim ini |
-| `GET` | `/api/v1/admin/verified-members` | Daftar pengguna yang telah terverifikasi via OTP WhatsApp |
+Untuk menjalankan mesin background WhatsApp Baileys di server, cukup ketik:
+
+```bash
+docker compose up -d
+```
+
+* Selesai! Tanpa setup `.env` dan tanpa perlu compile Node.js.
+* Engine akan berjalan otomatis di latar belakang dan melayani komunikasi privat di port `18091` (dan `http://openwa:2785` di jaringan bridge Docker).
 
 ---
 
-## 🐳 7. Menjalankan Engine Gateway (Docker)
-
-1. **Clone Repository:**
-   ```bash
-   git clone https://github.com/billi-panca-wijaya/wa-gateway.git
-   cd wa-gateway/deploy
-   ```
-
-2. **Jalankan Kontainer Gateway:**
-   ```bash
-   docker compose up -d
-   ```
-
-3. **Periksa Status Layanan:**
-   ```bash
-   docker compose ps
-   ```
-
----
-
-## 🔒 8. Kebijakan Keamanan & Data Pribadi
+## 🔒 7. Kebijakan Keamanan & Data Pribadi
 
 1. **Kredensial Terenkripsi**: API key pada tabel pool disimpan terenkripsi menggunakan AES-256 (`Crypt::encryptString`) dan tidak pernah diekspos dalam format plaintext di respons API.
 2. **Verifier Stateless HMAC**: Kode OTP diverifikasi melalui tanda tangan HMAC-SHA256 acak sekali pakai (*single-use*); kode OTP mentah tidak disimpan di database.

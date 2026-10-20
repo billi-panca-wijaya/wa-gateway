@@ -1,105 +1,36 @@
-# Dependencies
-node_modules/
-node_modules
-.pnp
-.pnp.js
+# Runtime Data & Databases
+data/
+*.sqlite
+*.sqlite3
+*.db
+sessions/
+.wwebjs_auth/
+.wwebjs_cache/
 
-# Build output
-dist/
-build/
-.next/
-out/
-
-# Testing
-coverage/
-
-# Environment
-**/.env
-**/.env.*
-!**/.env.example
-!**/.env.minimal
+# Environment files
 .env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
+.env.*
+!.env.example
 
-# Logs
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-logs/
-*.log
-
-# OS files
+# OS and Editors
 .DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
 Thumbs.db
-
-# IDE
 .idea/
 .vscode/
 *.swp
-*.swo
-*.sublime-workspace
-*.sublime-project
 
-# Data and storage
-data/
-media/
-!src/**/media/
-uploads/
-.wwebjs_auth/
-.wwebjs_cache/
-# scripts/backup.sh archives and restore.sh safety snapshots: copies of the same state
-/backups/
-*.pre-restore-*
-
-# Database
-*.db
-*.sqlite
-*.sqlite3
-
-# Docker
-.docker/
-
-# Misc
-*.bak
+# Logs and Temp
+logs/
+*.log
 *.tmp
 *.temp
 
-# Git worktrees
-.worktrees/
-
-# AI Agents
-.playwright-mcp/
-.remember/
-.agent/
-.claude/
-.zcode/
-.zcode-worktrees/
-docs/plans/
-docs/superpowers/
-CLAUDE.md
-_docs/
-.superpowers/
-# TypeScript incremental build cache (tsc writes this at repo root under the TS6 build config)
-*.tsbuildinfo
-
-# PRD and handoff documentation
+# Internal PRD & Guide Documents
 *.prd
 **/*.prd
 handoff.md
 HANDOFF.md
 *handoff*.md
 *HANDOFF*.md
-
-PANDUAN_LOGIKA_BISNIS_UNTUK_BOS.md
-PANDUAN_TEKNIS_IMPLEMENTASI_UG.md
-MASTER_PRD_WA_GATEWAY.md
 *PANDUAN*.md
 *MASTER_PRD*.md
