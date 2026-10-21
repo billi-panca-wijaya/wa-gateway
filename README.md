@@ -1,27 +1,81 @@
-# WhatsApp Gateway & Laravel Integration
+# WhatsApp Gateway — Add-on for Laravel
 
 [English](README.md) | [Bahasa Indonesia](README.id.md)
 
-Zero-configuration WhatsApp API Gateway and production-grade Laravel integration package. Designed for high availability, multi-sender pool rotation, automated failover, and full Back-Office management.
+Drop-in WhatsApp Login & multi-sender OTP add-on for **existing** Laravel websites.  
+Your Laravel app stays untouched — you only **add** new files, never overwrite existing ones.
 
 ---
 
-## Highlights
+## What This Does
 
-- **Zero-Config Gateway**: Runs out of the box with Docker. No manual environment variables or token configuration required.
-- **Dedicated Laravel Package**: Complete source code in [`laravel/`](laravel/) including Controllers, Models, Services, Migrations, Routes, and React UI components.
-- **9-Item Back-Office Sidebar Menu**:
-  1. **Sesi & Nomor Pengirim WA** (Multi-sender pool & session status)
-  2. **Member Terverifikasi** (Customer phone verification management)
-  3. **Dasbor** (Real-time gateway health & throughput)
-  4. **Obrolan** (Interactive live WhatsApp chat console)
-  5. **Webhook** (Webhook event subscriptions & retry monitor)
-  6. **Templat** (Message templates & snippets)
-  7. **Penguji Pesan** (Interactive message dispatch test console)
-  8. **Plugin** (Add-on plugins & integrations)
-  9. **Log** (Network transmission & gateway system logs)
-- **Multi-Sender Pool & Auto-Failover**: Round-robin message delivery across multiple WhatsApp numbers with automatic failover.
-- **Secure Reverse Proxy**: Embedded gateway access protected by Laravel admin session via Nginx subrequest authorization.
+| Feature | Description |
+|---------|-------------|
+| **WhatsApp OTP Login** | Customers log in by entering their phone number and receiving a 4-digit OTP via WhatsApp |
+| **Multi-Sender Pool** | Multiple WhatsApp sender numbers with round-robin rotation and auto-failover |
+| **9-Menu Admin Panel** | Full Back-Office management console added to your existing admin dashboard |
+| **Zero-Config Gateway** | WhatsApp engine runs as a Docker container — no API keys or tokens needed |
+
+---
+
+## How It Works (Simple)
+
+```
+Customer types phone number
+        |
+        v
+Your Laravel app sends OTP via WhatsApp
+(auto-rotates between multiple sender numbers)
+        |
+        v
+Customer enters the 4-digit code
+        |
+        v
+Verified → Logged in automatically
+```
+
+---
+
+## Quick Start
+
+### 1. Start the WhatsApp Engine
+
+```bash
+docker compose up -d
+```
+
+### 2. Copy the Add-on Files to Your Laravel Project
+
+```bash
+# Copy backend files (new files only — nothing is overwritten)
+cp -r laravel/app/Http/Controllers/WhatsApp/    your-laravel/app/Http/Controllers/WhatsApp/
+cp -r laravel/app/Models/Wa*                    your-laravel/app/Models/
+cp -r laravel/app/Models/Otp*                   your-laravel/app/Models/
+cp -r laravel/app/Models/SenderPool.php         your-laravel/app/Models/
+cp -r laravel/app/Services/WhatsAppOtp/         your-laravel/app/Services/WhatsAppOtp/
+cp -r laravel/app/Providers/WhatsAppOtpServiceProvider.php your-laravel/app/Providers/
+cp    laravel/config/whatsapp_otp.php           your-laravel/config/
+cp    laravel/database/migrations/*             your-laravel/database/migrations/
+cp    laravel/routes/whatsapp.php               your-laravel/routes/
+```
+
+### 3. Register & Migrate
+
+```php
+// bootstrap/providers.php (Laravel 11) or config/app.php
+App\Providers\WhatsAppOtpServiceProvider::class,
+```
+
+```php
+// routes/api.php — add this line
+require __DIR__ . '/whatsapp.php';
+```
+
+```bash
+php artisan migrate
+```
+
+**Done.** Your existing Laravel website now has WhatsApp login.
 
 ---
 
@@ -29,44 +83,45 @@ Zero-configuration WhatsApp API Gateway and production-grade Laravel integration
 
 ```
 wa-gateway/
-├── docker-compose.yml              # Zero-configuration WhatsApp Gateway container
-├── laravel/                        # Complete Laravel Integration Package
-│   ├── app/                        # Controllers, Models, Providers, Services
-│   ├── config/                     # whatsapp_otp.php configuration
-│   ├── database/migrations/        # Database schema for sender pool & OTP
-│   ├── nginx/                      # Nginx reverse proxy subrequest auth configuration
-│   ├── routes/                     # Ready-to-use API & Admin route definitions
-│   ├── ui/                         # React panels, micro-frontend & 9-menu example
-│   ├── README.md                   # Detailed Laravel installation guide (English)
-│   └── README.id.md                # Detailed Laravel installation guide (Indonesian)
-├── README.md                       # This file (English)
-└── README.id.md                    # This file (Indonesian)
+├── docker-compose.yml          # WhatsApp engine (just run: docker compose up -d)
+├── laravel/                    # Add-on files to copy into your Laravel project
+│   ├── app/                    # Controllers, Models, Services, Providers
+│   ├── config/                 # whatsapp_otp.php
+│   ├── database/migrations/    # 3 short migration files
+│   │   ├── 0001_wa_users.php   # Adds phone columns to your users table
+│   │   ├── 0002_wa_otp.php     # Creates otp_challenges & otp_deliveries tables
+│   │   └── 0003_wa_senders.php # Creates sender_pool table
+│   ├── nginx/                  # Reverse proxy config (for embedded gateway console)
+│   ├── routes/whatsapp.php     # All API routes — just require() in your api.php
+│   └── ui/                     # React admin panels (optional)
+├── README.md                   # This file
+└── README.id.md                # Bahasa Indonesia version
 ```
 
 ---
 
-## Quick Start: Starting the Gateway
+## What Files Get Added to Your Laravel Project
 
-Run the container using Docker Compose:
+> **Important**: No existing file is overwritten. Everything below is a NEW file.
 
-```bash
-docker compose up -d
-```
-
-The gateway will start on:
-- Healthcheck Endpoint: `http://127.0.0.1:18091/api/health/ready`
-- Internal Gateway Port: `2785`
+| Your Laravel Project | What Gets Added | Purpose |
+|---------------------|----------------|---------|
+| `app/Http/Controllers/WhatsApp/` | New folder with 4 controllers | OTP, SenderPool, VerifiedMembers, Gateway |
+| `app/Models/` | 3 new model files | OtpChallenge, OtpDelivery, SenderPool |
+| `app/Services/WhatsAppOtp/` | New folder with service classes | OTP logic, sender pool rotation, phone normalization |
+| `app/Providers/` | 1 new provider file | WhatsAppOtpServiceProvider |
+| `config/` | 1 new config file | whatsapp_otp.php |
+| `database/migrations/` | 3 new migration files | New tables + columns on users table |
+| `routes/` | 1 new route file | whatsapp.php |
 
 ---
 
-## Integrating with Laravel
+## Detailed Guide
 
-All integration code, models, controllers, and UI panels are located in the [`laravel/`](laravel/) directory.
+For the complete step-by-step guide including the 9-item admin menu setup, Nginx reverse proxy configuration, and React UI panel integration, see the [**Laravel Add-on Guide**](laravel/README.md).
 
-To install:
-1. Copy `laravel/app/`, `laravel/config/`, and `laravel/database/` into your Laravel project.
-2. Run `php artisan migrate`.
-3. Include `routes/whatsapp.php` in your Laravel `routes/api.php`.
-4. Embed the UI panels into your Back-Office dashboard.
+---
 
-For complete, detailed instructions on configuring the 9-item admin sidebar menu and Nginx reverse proxy, read the [Laravel Integration Guide](laravel/README.md).
+## License
+
+[MIT License](LICENSE)

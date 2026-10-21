@@ -4,6 +4,10 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
+/**
+ * Adds WhatsApp phone login columns to the existing users table.
+ * Safe to run on any Laravel project — only adds new columns, never overwrites.
+ */
 return new class extends Migration
 {
     public function up(): void

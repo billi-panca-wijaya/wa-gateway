@@ -1,201 +1,254 @@
-# Laravel WhatsApp Gateway & Multi-Sender OTP Package
+# WhatsApp Login Add-on — Laravel Integration Guide
 
 [English](README.md) | [Bahasa Indonesia](README.id.md)
 
-Production-ready Laravel integration package for WhatsApp Gateway, featuring multi-sender pool rotation, automated failover, customer phone OTP authentication, and a complete 9-menu Back-Office administration console.
+This folder contains all files needed to add WhatsApp OTP login and multi-sender management to your **existing** Laravel website. Nothing here replaces or overwrites your current files.
 
 ---
 
-## Architecture Overview
+## Before You Start
 
-This package connects your Laravel application directly to a local or Docker-hosted WhatsApp Gateway instance. 
+**Requirements:**
+- Laravel 10 or 11
+- PHP 8.1+
+- Docker (for the WhatsApp engine)
+- Your Laravel website is already running
 
-```
-+-----------------------------------------------------------------------------------+
-|                              Laravel Back-Office UI                               |
-|                                                                                   |
-|  [WhatsApp Gateway Sidebar Menu - 9 Items]                                        |
-|  1. Sesi & Nomor Pengirim WA   -> Native Panel (SenderPoolPanel.tsx)             |
-|  2. Member Terverifikasi        -> Native Panel (VerifiedMembersPanel.tsx)        |
-|  3. Dasbor                     -> Embedded Micro-Frontend (OpenWaApp.tsx)         |
-|  4. Obrolan                    -> Embedded Micro-Frontend (OpenWaApp.tsx)         |
-|  5. Webhook                    -> Embedded Micro-Frontend (OpenWaApp.tsx)         |
-|  6. Templat                    -> Embedded Micro-Frontend (OpenWaApp.tsx)         |
-|  7. Penguji Pesan              -> Embedded Micro-Frontend (OpenWaApp.tsx)         |
-|  8. Plugin                     -> Embedded Micro-Frontend (OpenWaApp.tsx)         |
-|  9. Log                        -> Embedded Micro-Frontend (OpenWaApp.tsx)         |
-+----------------------------------------+------------------------------------------+
-                                         |
-     +-----------------------------------+-----------------------------------+
-     | Authenticated Admin API Calls         | Reverse-Proxied & Auth-Guarded
-     v                                       v
-+------------------------------------+   +------------------------------------+
-| Laravel API                        |   | Nginx Reverse Proxy                |
-| - WhatsAppOtpController            |   | - auth_request /_gateway_auth      |
-| - SenderPoolController             |   | - /gateway-api/ -> Gateway:2785    |
-| - VerifiedMembersController        |   | - /gateway-socket/ -> WebSocket    |
-| - WhatsAppGatewayController        |   +-----------------+------------------+
-| - OtpService & SenderPoolService   |                     |
-+-----------------+------------------+                     |
-                  |                                        |
-                  +-------------------+--------------------+
-                                      |
-                                      v
-                        +---------------------------+
-                        | Zero-Config WA Gateway    |
-                        | (Docker Container :2785)  |
-                        +---------------------------+
-```
+**What you'll get after installation:**
+- Customers can log in using their WhatsApp phone number
+- Admin panel to manage multiple WhatsApp sender numbers
+- Automatic rotation and failover between sender numbers
+- 9 new menu items in your admin dashboard
 
 ---
 
-## Package Directory Structure
+## Step 1: Start the WhatsApp Engine
 
+In the root of this repository (where `docker-compose.yml` is):
+
+```bash
+docker compose up -d
 ```
-laravel/
-├── app/
-│   ├── Http/
-│   │   └── Controllers/
-│   │       ├── WhatsAppOtpController.php           # Customer OTP request & verification
-│   │       ├── Admin/
-│   │       │   ├── SenderPoolController.php        # Sender pool & session management
-│   │       │   ├── VerifiedMembersController.php   # Verified member queries & audit
-│   │       │   └── WhatsAppGatewayController.php   # Gateway health & Nginx auth subrequest
-│   │       └── BackOffice/
-│   │           └── WhatsAppMemberWebhookController.php # Webhook listener for verified members
-│   ├── Models/
-│   │   ├── SenderPool.php                         # WhatsApp sender session credentials & health
-│   │   ├── OtpChallenge.php                       # Rate-limiting, HMAC verifier, expiry state
-│   │   └── OtpDelivery.php                        # Delivery attempt audits & session tracking
-│   ├── Providers/
-│   │   └── WhatsAppOtpServiceProvider.php         # Service bindings & pool injection
-│   └── Services/
-│       └── WhatsAppOtp/
-│           ├── OpenWaSessionClient.php            # Direct communication with Gateway API
-│           ├── OtpService.php                     # Complete OTP generation, hashing & verify
-│           ├── SenderPoolService.php              # Multi-sender rotation & automatic failover
-│           ├── PhoneNumber.php                    # E.164 normalization & validation
-│           ├── TenantResolver.php                 # Multi-tenant host resolution
-│           └── Transport/                         # PooledTransport, OpenWaTransport, Mock
-├── config/
-│   └── whatsapp_otp.php                           # Complete OTP and Gateway configuration
-├── database/
-│   └── migrations/
-│       ├── 2026_10_08_000001_add_whatsapp_login_to_users_table.php
-│       ├── 2026_10_08_000002_create_otp_challenges_tables.php
-│       ├── 2026_10_14_000001_create_sender_pool_table.php
-│       └── 2026_10_15_000001_make_api_key_nullable_in_sender_pool_table.php
-├── nginx/
-│   └── gateway-reverse-proxy.conf                 # Secure subrequest proxy directives
-├── routes/
-│   └── whatsapp.php                               # All API and Admin routes ready to import
-└── ui/
-    ├── components/
-    │   ├── SenderPoolPanel.tsx                    # Menu 1: Sesi & Nomor Pengirim WA
-    │   ├── VerifiedMembersPanel.tsx               # Menu 2: Member Terverifikasi
-    │   ├── WhatsAppGatewayPanel.tsx               # Standalone multi-sender wrapper
-    │   ├── WhatsAppOtpForm.tsx                    # Customer login form with OTP
-    │   └── OtpInput.tsx                           # 4-6 digit numeric OTP pin input
-    ├── openwa/                                    # Embedded micro-frontend (Menus 3 - 9)
-    │   ├── OpenWaApp.tsx                          # Root micro-frontend router
-    │   ├── pages.ts                               # Route definitions for menus 3 - 9
-    │   └── pages/                                 # Dasbor, Chats, Webhooks, Templates, etc.
-    └── examples/
-        └── AdminDashboardSidebarExample.tsx       # Complete 9-item back-office example
+
+This starts a WhatsApp engine container on port `18091` (internal: `2785`).  
+No configuration needed — it just works.
+
+---
+
+## Step 2: Copy Files to Your Laravel Project
+
+Copy these folders and files into your Laravel project.  
+**All files are new — nothing overwrites your existing code.**
+
+```bash
+# Controllers (new folder: WhatsApp/)
+cp app/Http/Controllers/WhatsAppOtpController.php         YOUR_LARAVEL/app/Http/Controllers/
+cp -r app/Http/Controllers/Admin/                          YOUR_LARAVEL/app/Http/Controllers/Admin/
+cp -r app/Http/Controllers/BackOffice/                     YOUR_LARAVEL/app/Http/Controllers/BackOffice/
+
+# Models (3 new files)
+cp app/Models/OtpChallenge.php                             YOUR_LARAVEL/app/Models/
+cp app/Models/OtpDelivery.php                              YOUR_LARAVEL/app/Models/
+cp app/Models/SenderPool.php                               YOUR_LARAVEL/app/Models/
+
+# Services (new folder)
+cp -r app/Services/WhatsAppOtp/                            YOUR_LARAVEL/app/Services/WhatsAppOtp/
+
+# Provider (1 new file)
+cp app/Providers/WhatsAppOtpServiceProvider.php            YOUR_LARAVEL/app/Providers/
+
+# Config (1 new file)
+cp config/whatsapp_otp.php                                 YOUR_LARAVEL/config/
+
+# Migrations (3 new short files)
+cp database/migrations/0001_wa_users.php                   YOUR_LARAVEL/database/migrations/
+cp database/migrations/0002_wa_otp.php                     YOUR_LARAVEL/database/migrations/
+cp database/migrations/0003_wa_senders.php                 YOUR_LARAVEL/database/migrations/
+
+# Routes (1 new file)
+cp routes/whatsapp.php                                     YOUR_LARAVEL/routes/
 ```
 
 ---
 
-## Step-by-Step Installation into Laravel
+## Step 3: Register the Service Provider
 
-### 1. Copy Backend Files
-Copy the directories to your Laravel application:
-- `app/` -> `app/`
-- `config/whatsapp_otp.php` -> `config/whatsapp_otp.php`
-- `database/migrations/*` -> `database/migrations/`
-- `routes/whatsapp.php` -> `routes/whatsapp.php`
-
-### 2. Register Service Provider
-In Laravel 11 / 10, register the service provider in `bootstrap/providers.php` (or `config/app.php`):
-
+**Laravel 11** — open `bootstrap/providers.php`:
 ```php
 return [
-    // ...
-    App\Providers\WhatsAppOtpServiceProvider::class,
+    // ... your existing providers ...
+    App\Providers\WhatsAppOtpServiceProvider::class,  // ← add this line
 ];
 ```
 
-### 3. Run Migrations
-Execute the database schema updates:
-```bash
-php artisan migrate
+**Laravel 10** — open `config/app.php`, find the `providers` array:
+```php
+'providers' => [
+    // ... your existing providers ...
+    App\Providers\WhatsAppOtpServiceProvider::class,  // ← add this line
+],
 ```
 
-This will create:
-- `sender_pool`: Stores WhatsApp session identifiers, sender phone numbers, session statuses, and failover counters.
-- `otp_challenges` & `otp_deliveries`: Stores hashed verification tokens, expiry timestamps, and delivery logs.
-- Adds `phone_e164`, `phone_verified_at`, and `tenant_key` columns to your `users` table.
+---
 
-### 4. Register Routes
-In your Laravel `routes/api.php`, add:
+## Step 4: Add the Routes
+
+Open your `routes/api.php` and add one line at the bottom:
+
 ```php
 require __DIR__ . '/whatsapp.php';
 ```
 
 ---
 
-## The 9 Back-Office Menu Items Configuration
+## Step 5: Run Migrations
 
-To display the complete 9-item menu under **WhatsApp Gateway** in your admin sidebar:
+```bash
+php artisan migrate
+```
 
-| # | Menu Item Label (Indonesian) | English Function | Component / Implementation | Target Endpoint / URL |
-|---|-----------------------------|------------------|---------------------------|-----------------------|
-| 1 | **Sesi & Nomor Pengirim WA** | WhatsApp Senders & Sessions | `<SenderPoolPanel />` (Native React) | `/api/v1/admin/sender-pool` |
-| 2 | **Member Terverifikasi** | Verified Members | `<VerifiedMembersPanel />` (Native React) | `/api/v1/admin/verified-members` |
-| 3 | **Dasbor** | Gateway Dashboard | `<OpenWaApp />` (Embedded) | `/dashboard/gateway` |
-| 4 | **Obrolan** | Live Chat Console | `<OpenWaApp />` (Embedded) | `/dashboard/gateway/chats` |
-| 5 | **Webhook** | Webhook Manager | `<OpenWaApp />` (Embedded) | `/dashboard/gateway/webhooks` |
-| 6 | **Templat** | Message Templates | `<OpenWaApp />` (Embedded) | `/dashboard/gateway/templates` |
-| 7 | **Penguji Pesan** | Message Tester | `<OpenWaApp />` (Embedded) | `/dashboard/gateway/message-tester` |
-| 8 | **Plugin** | Plugins & Add-ons | `<OpenWaApp />` (Embedded) | `/dashboard/gateway/plugins` |
-| 9 | **Log** | System & Network Logs | `<OpenWaApp />` (Embedded) | `/dashboard/gateway/logs` |
-
-### How It Works:
-1. **Menus 1 & 2** are dedicated native panels rendered directly inside your Laravel React Admin theme. They interact with `SenderPoolController` and `VerifiedMembersController` through standard Sanctum authentication.
-2. **Menus 3 through 9** are powered by the lightweight embedded micro-frontend (`OpenWaApp.tsx`). When the admin clicks any of these 7 menus, the URL switches to `/dashboard/gateway/*`, seamlessly rendering the corresponding gateway management screen inside your admin layout.
+This will:
+- Add `phone_e164`, `phone_verified_at`, `tenant_key` columns to your `users` table
+- Create new table: `otp_challenges`
+- Create new table: `otp_deliveries`
+- Create new table: `sender_pool`
 
 ---
 
-## Nginx Subrequest Security Architecture
+## Step 6: Add the User Model Trait (Optional)
 
-To prevent exposing WhatsApp Gateway credentials or exposing internal ports directly to the browser, Nginx proxies all embedded console requests via an internal authorization check:
+If your `User` model doesn't already have the phone columns in its `$fillable`, add them:
+
+```php
+// app/Models/User.php
+protected $fillable = [
+    // ... your existing fields ...
+    'tenant_key',
+    'phone_e164',
+    'phone_verified_at',
+    'onboarding_completed_at',
+];
+
+protected function casts(): array
+{
+    return [
+        // ... your existing casts ...
+        'phone_verified_at' => 'datetime',
+        'onboarding_completed_at' => 'datetime',
+    ];
+}
+```
+
+---
+
+## That's It! Your API Endpoints Are Ready
+
+After installation, these API routes are automatically available:
+
+### Customer Endpoints (Public)
+| Method | URL | Description |
+|--------|-----|-------------|
+| POST | `/api/v1/whatsapp/request-otp` | Send OTP to customer's phone |
+| POST | `/api/v1/whatsapp/verify-otp` | Verify OTP code and log in |
+| POST | `/api/v1/whatsapp/resend-otp` | Resend OTP code |
+
+### Admin Endpoints (Requires auth + admin role)
+| Method | URL | Description |
+|--------|-----|-------------|
+| GET | `/api/v1/admin/sender-pool` | List all sender numbers |
+| POST | `/api/v1/admin/sender-pool` | Add new sender number |
+| GET | `/api/v1/admin/sender-pool/{id}/qr` | Get QR code for pairing |
+| POST | `/api/v1/admin/sender-pool/{id}/pairing-code` | Get 8-digit pairing code |
+| POST | `/api/v1/admin/sender-pool/{id}/start` | Start sender session |
+| POST | `/api/v1/admin/sender-pool/{id}/stop` | Stop sender session |
+| POST | `/api/v1/admin/sender-pool/{id}/test-send` | Send test message |
+| DELETE | `/api/v1/admin/sender-pool/{id}` | Remove sender |
+| GET | `/api/v1/admin/verified-members` | List verified members |
+| GET | `/api/v1/admin/whatsapp-gateway` | Gateway status |
+
+---
+
+## Files Reference
+
+```
+laravel/                              ← this folder
+├── app/
+│   ├── Http/Controllers/
+│   │   ├── WhatsAppOtpController.php           # Customer OTP endpoints
+│   │   ├── Admin/
+│   │   │   ├── SenderPoolController.php        # Manage sender numbers
+│   │   │   ├── VerifiedMembersController.php   # View verified members
+│   │   │   └── WhatsAppGatewayController.php   # Gateway health + Nginx auth
+│   │   └── BackOffice/
+│   │       └── WhatsAppMemberWebhookController.php
+│   ├── Models/
+│   │   ├── OtpChallenge.php
+│   │   ├── OtpDelivery.php
+│   │   └── SenderPool.php
+│   ├── Providers/
+│   │   └── WhatsAppOtpServiceProvider.php
+│   └── Services/WhatsAppOtp/
+│       ├── OpenWaSessionClient.php
+│       ├── OtpService.php
+│       ├── SenderPoolService.php
+│       ├── PhoneNumber.php
+│       ├── TenantResolver.php
+│       ├── OtpException.php
+│       └── Transport/
+│           ├── PooledTransport.php
+│           ├── OpenWaTransport.php
+│           ├── MockTransport.php
+│           ├── OtpTransport.php
+│           └── DeliveryResult.php
+├── config/
+│   └── whatsapp_otp.php
+├── database/migrations/
+│   ├── 0001_wa_users.php               # Adds columns to users table
+│   ├── 0002_wa_otp.php                 # Creates OTP tables
+│   └── 0003_wa_senders.php             # Creates sender pool table
+├── nginx/
+│   └── gateway-reverse-proxy.conf      # For embedded gateway console
+├── routes/
+│   └── whatsapp.php                    # All WhatsApp API routes
+├── ui/                                 # React admin panels (optional)
+│   ├── components/
+│   │   ├── SenderPoolPanel.tsx
+│   │   ├── VerifiedMembersPanel.tsx
+│   │   ├── WhatsAppOtpForm.tsx
+│   │   └── OtpInput.tsx
+│   └── openwa/                         # Embedded gateway micro-frontend
+└── README.md                           # This file
+```
+
+---
+
+## 9 Admin Menu Items
+
+When you integrate the UI panels into your admin dashboard, you get 9 WhatsApp management menus:
+
+| # | Menu Label | Type | Component |
+|---|-----------|------|-----------|
+| 1 | Sesi & Nomor Pengirim WA | Native Panel | `<SenderPoolPanel />` |
+| 2 | Member Terverifikasi | Native Panel | `<VerifiedMembersPanel />` |
+| 3 | Dasbor | Embedded | Gateway micro-frontend |
+| 4 | Obrolan | Embedded | Gateway micro-frontend |
+| 5 | Webhook | Embedded | Gateway micro-frontend |
+| 6 | Templat | Embedded | Gateway micro-frontend |
+| 7 | Penguji Pesan | Embedded | Gateway micro-frontend |
+| 8 | Plugin | Embedded | Gateway micro-frontend |
+| 9 | Log | Embedded | Gateway micro-frontend |
+
+Menus 1-2 are standalone React panels that call your Laravel API directly.  
+Menus 3-9 are an embedded micro-frontend proxied through Nginx (see `nginx/gateway-reverse-proxy.conf`).
+
+---
+
+## Nginx Setup (For Menus 3-9 Only)
+
+If you want the embedded gateway console (menus 3-9), add this to your Nginx config:
 
 ```nginx
-# In your Laravel Nginx configuration:
 include /path/to/laravel/nginx/gateway-reverse-proxy.conf;
 ```
 
-### Flow:
-1. When the browser requests `/gateway-api/*` or `/gateway-socket/*`, Nginx intercepts the request and fires an internal subrequest to `/_gateway_auth` (`WhatsAppGatewayController::authorizeDashboard`).
-2. Laravel verifies the admin's Sanctum session and role (`super-admin` or `admin`).
-3. If valid, Laravel returns HTTP `204 No Content`, and Nginx forwards the request to the gateway container on `http://openwa:2785`.
-4. If unauthorized, Laravel returns HTTP `403 Forbidden`, terminating the request immediately.
-
----
-
-## Multi-Sender Pool & Auto-Failover Features
-
-- **Round-Robin Rotation**: When customers request OTP codes, `SenderPoolService` rotates across all active sender numbers, spreading dispatch volume evenly.
-- **Automatic Health Checks**: Detects if a WhatsApp session becomes disconnected or banned.
-- **Failover on Dispatch Error**: If a sender number encounters a network failure or temporary limit, the system automatically dispatches the code using the next available sender in the pool without user disruption.
-- **Auto-Suspension**: Unresponsive sessions are automatically suspended with cooldown periods to prevent repeated delivery failures.
-
----
-
-## Customer WhatsApp Login Form
-
-Include `<WhatsAppOtpForm />` on your customer-facing authentication page. It handles:
-1. International / local phone number formatting (e.g. `0812...` automatically converted to `+62812...`).
-2. OTP request rate limiting with countdown timer.
-3. 4 to 6-digit numeric OTP pin input with automatic verification.
-4. Auto-login session creation upon successful code verification.
+This proxies `/gateway-api/*` and `/gateway-socket/*` to the Docker container, with admin authentication enforced by Laravel.

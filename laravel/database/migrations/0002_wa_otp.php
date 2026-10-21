@@ -4,6 +4,10 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
+/**
+ * Creates the OTP challenge & delivery audit tables.
+ * These are new tables — no conflict with existing database.
+ */
 return new class extends Migration
 {
     public function up(): void
