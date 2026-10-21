@@ -10,7 +10,7 @@ sessions/
 # Environment files
 .env
 .env.*
-!.env.example
+
 
 # OS and Editors
 .DS_Store

@@ -1,0 +1,119 @@
+/* Frame for the embedded OpenWA dashboard. Selectors are prefixed with .openwa-root at build time
+   (vite.config.ts), so they only apply inside the gateway area of the website admin. */
+
+.openwa-root {
+  margin: -1.25rem calc(-1 * var(--gutter, 1rem)) -2.5rem;
+  min-height: calc(100vh - 60px);
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-light);
+  color: var(--text-primary);
+  line-height: 1.6;
+  animation: openwa-fade 0.3s ease-out;
+}
+
+@media (min-width: 1024px) {
+  .openwa-root {
+    margin: -2rem -2.5rem -3rem;
+    min-height: 100vh;
+  }
+}
+
+.openwa-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  padding: 0.75rem 1.5rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-white);
+}
+
+.openwa-brand {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.openwa-brand strong {
+  font-size: 1rem;
+  color: var(--text-primary);
+}
+
+.openwa-brand span {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+.openwa-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.openwa-lang {
+  width: auto;
+  min-width: 10rem;
+  padding-block: 0.45rem;
+  font-size: 0.85rem;
+}
+
+.openwa-toolbar .openwa-theme {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  width: auto;
+  padding: 0.45rem 0.85rem;
+  font-size: 0.85rem;
+  white-space: nowrap;
+  color: var(--text-primary);
+  background: var(--bg-light);
+  border: 1px solid var(--border);
+}
+
+.openwa-main {
+  flex: 1;
+  min-width: 0;
+  padding: 1.5rem;
+}
+
+@media (max-width: 640px) {
+  .openwa-toolbar,
+  .openwa-main {
+    padding-inline: 1rem;
+  }
+}
+
+.openwa-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40vh;
+}
+
+.openwa-footer {
+  padding: 1rem 1.5rem 1.5rem;
+  text-align: center;
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+
+@keyframes openwa-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}

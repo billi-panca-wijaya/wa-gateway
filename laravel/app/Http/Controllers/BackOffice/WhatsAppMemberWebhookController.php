@@ -1,0 +1,53 @@
+<?php
+
+namespace AppHttpControllersBackOffice;
+
+use AppHttpControllersController;
+use IlluminateHttpJsonResponse;
+use IlluminateHttpRequest;
+use IlluminateSupportFacadesLog;
+
+/**
+ * Controller to receive incoming webhooks when a customer verifies their WhatsApp number.
+ */
+class WhatsAppMemberWebhookController extends Controller
+{
+    public function __invoke(Request $request): JsonResponse
+    {
+        $rawContent = $request->getContent();
+        $secret = config('whatsapp_otp.webhook.secret');
+
+        // Signature Verification (HMAC SHA-256)
+        if (! empty($secret)) {
+            $expectedSignature = hash_hmac('sha256', $rawContent, $secret);
+            $providedSignature = $request->header('X-Webhook-Signature');
+
+            if (! $providedSignature || ! hash_equals($expectedSignature, $providedSignature)) {
+                Log::warning('WhatsApp Webhook rejected: Invalid HMAC signature.');
+
+                return response()->json(['status' => 'error', 'message' => 'Invalid signature'], 401);
+            }
+        }
+
+        $payload = $request->json()->all();
+        $event = $payload['event'] ?? null;
+
+        if ($event === 'member.verified') {
+            $phoneE164 = $payload['phone_e164'] ?? null;
+            $userId = $payload['user_id'] ?? null;
+            $uuid = $payload['uuid'] ?? null;
+            $tenantKey = $payload['tenant_key'] ?? 'default';
+            $verifiedAt = $payload['phone_verified_at'] ?? now()->toIso8601String();
+
+            Log::info("WhatsApp Member Verified Webhook received for {$phoneE164} (UUID: {$uuid})");
+
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Webhook processed successfully',
+                'processed_at' => now()->toIso8601String(),
+            ]);
+        }
+
+        return response()->json(['status' => 'ignored', 'message' => "Unhandled event: {$event}"]);
+    }
+}
