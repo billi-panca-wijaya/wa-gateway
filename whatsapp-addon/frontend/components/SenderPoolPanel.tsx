@@ -29,7 +29,7 @@ const STATUS_CONFIG: Record<string, { label: string; className: string }> = {
 
 const REASON_LABELS: Record<string, string> = {
     manual_admin_toggle: 'Dijeda manual oleh admin',
-    DELIVERY_FAILED: 'Gagal mengirim pesan terakhir',
+    DELIVERY_FAILED: 'Failed to deliver last message',
     GATEWAY_UNREACHABLE: 'Gateway tidak merespons',
     GATEWAY_HTTP_400: 'Sesi WhatsApp belum tertaut',
     GATEWAY_HTTP_404: 'Sesi belum dibuat di gateway',
@@ -51,7 +51,7 @@ const formatTime = (iso: string | null) => {
 };
 
 const errText = (err: unknown) =>
-    Axios.isAxiosError(err) ? ((err.response?.data as { message?: string })?.message ?? 'Permintaan gagal.') : 'Permintaan gagal.';
+    Axios.isAxiosError(err) ? ((err.response?.data as { message?: string })?.message ?? 'Request failed.') : 'Permintaan gagal.';
 
 export default function SenderPoolPanel() {
     const [senders, setSenders] = useState<SenderPoolItem[]>([]);
@@ -129,7 +129,7 @@ export default function SenderPoolPanel() {
             setNewLabel('');
             setNewApiKey('');
             setShowAdvancedKey(false);
-            setNotice('Nomor pengirim baru berhasil ditambahkan.');
+            setNotice('New sender number added successfully.');
             await loadSenders();
             if (created && autoCreateOpenWa) {
                 openPairingModal(created);
@@ -150,8 +150,8 @@ export default function SenderPoolPanel() {
             await axios.post(`/api/v1/admin/sender-pool/${sender.id}/toggle`);
             setNotice(
                 sender.status === 'active'
-                    ? `Nomor "${sender.label || sender.session_id}" dijeda sementara dari antrean OTP.`
-                    : `Nomor "${sender.label || sender.session_id}" diaktifkan kembali untuk mengirim OTP.`
+                    ? `Sender "${sender.label || sender.session_id}" has been paused from the OTP queue.`
+                    : `Sender "${sender.label || sender.session_id}" has been re-activated for OTP delivery.`
             );
             await loadSenders();
         } catch (err) {
@@ -168,7 +168,7 @@ export default function SenderPoolPanel() {
         try {
             await axios.get('/sanctum/csrf-cookie');
             await axios.post(`/api/v1/admin/sender-pool/${sender.id}/sync`);
-            setNotice(`Status "${sender.label || sender.session_id}" berhasil diperbarui dari gateway.`);
+            setNotice(`Status for "${sender.label || sender.session_id}" updated successfully from gateway.`);
             await loadSenders();
         } catch (err) {
             setError(errText(err));
@@ -178,7 +178,7 @@ export default function SenderPoolPanel() {
     };
 
     const handleDeleteSender = async (sender: SenderPoolItem) => {
-        if (!window.confirm(`Hapus nomor pengirim "${sender.label || sender.session_id}" dari daftar?`)) {
+        if (!window.confirm(`Remove sender number "${sender.label || sender.session_id}" from the list?`)) {
             return;
         }
         setBusyId(sender.id);
@@ -187,7 +187,7 @@ export default function SenderPoolPanel() {
         try {
             await axios.get('/sanctum/csrf-cookie');
             await axios.delete(`/api/v1/admin/sender-pool/${sender.id}`);
-            setNotice(`Nomor "${sender.label || sender.session_id}" berhasil dihapus.`);
+            setNotice(`Sender "${sender.label || sender.session_id}" removed successfully.`);
             await loadSenders();
         } catch (err) {
             setError(errText(err));
@@ -218,13 +218,13 @@ export default function SenderPoolPanel() {
                     const fresh = syncRes.data?.data;
                     setActivePairingSender(null);
                     setPairingPolling(false);
-                    setNotice(`WhatsApp "${fresh?.label || fresh?.session_id}" (${fresh?.phone_e164 || 'nomor pengirim'}) berhasil terhubung!`);
+                    setNotice(`WhatsApp sender "${fresh?.label || fresh?.session_id}" (${fresh?.phone_e164 || 'sender'}) connected successfully!`);
                     void loadSenders();
                     return;
                 } catch {
                     setActivePairingSender(null);
                     setPairingPolling(false);
-                    setNotice('WhatsApp berhasil terhubung!');
+                    setNotice('WhatsApp connected successfully!');
                     void loadSenders();
                     return;
                 }
@@ -280,7 +280,7 @@ export default function SenderPoolPanel() {
 
     const handleSessionAction = async (action: 'start' | 'stop' | 'logout') => {
         if (!activePairingSender) return;
-        if (action === 'logout' && !window.confirm('Lepas tautan WhatsApp dari nomor pengirim ini?')) return;
+        if (action === 'logout' && !window.confirm('Unlink WhatsApp session from this sender number?')) return;
         setBusyId(`session-${action}`);
         setError('');
         setNotice('');
@@ -288,7 +288,7 @@ export default function SenderPoolPanel() {
             await axios.get('/sanctum/csrf-cookie');
             await axios.post(`/api/v1/admin/sender-pool/${activePairingSender.id}/${action}`);
             const labelMap = { start: 'dimulai', stop: 'dihentikan', logout: 'dilepas tautannya' };
-            setNotice(`Sesi "${activePairingSender.label || activePairingSender.session_id}" berhasil ${labelMap[action]}.`);
+            setNotice(`Session "${activePairingSender.label || activePairingSender.session_id}" successfully executed ${action}.`);
             await loadSenders();
             if (action === 'start') {
                 void loadQrCode(activePairingSender.id);
@@ -312,7 +312,7 @@ export default function SenderPoolPanel() {
                 phone: testPhone,
                 message: testMessage || undefined,
             });
-            setTestResult(res.data.message || 'Pesan uji berhasil dikirim.');
+            setTestResult(res.data.message || 'Test message sent successfully.');
         } catch (err) {
             setError(errText(err));
         } finally {
@@ -341,14 +341,14 @@ export default function SenderPoolPanel() {
                 <div className="stat-card glass-panel">
                     <span className="stat-accent accent-green" />
                     <div className="stat-details">
-                        <h3>Nomor Siap Kirim</h3>
+                        <h3>Active Senders Ready</h3>
                         <p className="stat-number text-success">{activeCount}</p>
                     </div>
                 </div>
                 <div className="stat-card glass-panel">
                     <span className="stat-accent accent-indigo" />
                     <div className="stat-details">
-                        <h3>Total Nomor Terdaftar</h3>
+                        <h3>Total Registered Senders</h3>
                         <p className="stat-number">{senders.length}</p>
                     </div>
                 </div>
@@ -366,13 +366,13 @@ export default function SenderPoolPanel() {
                 <div className="gw-header">
                     <div className="gw-title-wrap">
                         <div className="gw-title-row">
-                            <h3>Daftar Nomor Pengirim OTP</h3>
+                            <h3>WhatsApp OTP Sender Pool</h3>
                             <span className="badge badge-status-active">
                                 {activeCount} dari {senders.length} Aktif
                             </span>
                         </div>
                         <p className="gw-subtitle">
-                            Tambahkan satu atau beberapa nomor WhatsApp pengirim. Sistem membagi pengiriman OTP secara bergantian dan otomatis beralih ke nomor lain bila ada yang terputus.
+                            Add one or multiple WhatsApp sender phone numbers. The system distributes OTP delivery via round-robin and automatically fails over if a session disconnects.
                         </p>
                     </div>
 
@@ -388,10 +388,10 @@ export default function SenderPoolPanel() {
                                 <input
                                     type="search"
                                     className="fx-input"
-                                    placeholder="Cari nama, kode sesi, atau nomor..."
+                                    placeholder="Search by label, session ID, or phone..."
                                     value={filter}
                                     onChange={(e) => setFilter(e.target.value)}
-                                    aria-label="Cari nomor pengirim"
+                                    aria-label="Search sender numbers"
                                 />
                                 {filter && (
                                     <button
@@ -418,7 +418,7 @@ export default function SenderPoolPanel() {
                             className="btn btn-sm btn-primary"
                             onClick={() => setShowAddModal(true)}
                         >
-                            + Tambah Nomor Pengirim
+                            + Add Sender Number
                         </button>
                     </div>
                 </div>
@@ -432,10 +432,10 @@ export default function SenderPoolPanel() {
                         <thead>
                             <tr>
                                 <th>Nama &amp; Kode Sesi</th>
-                                <th>Nomor WhatsApp</th>
+                                <th>WhatsApp Number</th>
                                 <th>Status</th>
                                 <th>Terakhir Mengirim</th>
-                                <th>Riwayat Gagal</th>
+                                <th>Fail Count</th>
                                 <th style={{ textAlign: 'right' }}>Aksi</th>
                             </tr>
                         </thead>
@@ -444,7 +444,7 @@ export default function SenderPoolPanel() {
                                 <tr>
                                     <td colSpan={6} className="empty-state">
                                         <span className="spinner large" />
-                                        <p className="mt-2">Memuat daftar nomor pengirim...</p>
+                                        <p className="mt-2">Loading sender numbers...</p>
                                     </td>
                                 </tr>
                             ) : filteredSenders.length === 0 ? (
@@ -453,12 +453,12 @@ export default function SenderPoolPanel() {
                                         <div className="gw-empty">
                                             <p className="gw-empty-title">
                                                 {senders.length === 0
-                                                    ? 'Belum ada nomor tambahan di daftar pengirim'
-                                                    : 'Tidak ada nomor pengirim yang cocok dengan pencarian'}
+                                                    ? 'No sender numbers added yet'
+                                                    : 'No sender numbers match your search'}
                                             </p>
                                             <p className="gw-empty-desc">
                                                 {senders.length === 0
-                                                    ? 'Klik tombol "+ Tambah Nomor Pengirim" di kanan atas untuk mendaftarkan nomor WhatsApp pengirim OTP baru.'
+                                                    ? 'Click "+ Add Sender Number" button in the top right to register a new WhatsApp sender.'
                                                     : 'Coba kata kunci lain atau bersihkan kotak pencarian.'}
                                             </p>
                                             {senders.length === 0 && (
@@ -519,7 +519,7 @@ export default function SenderPoolPanel() {
                                             <td>
                                                 {sender.fail_count > 0 ? (
                                                     <span className="badge badge-status-inactive">
-                                                        {sender.fail_count}x gagal
+                                                        {sender.fail_count}x failed
                                                     </span>
                                                 ) : (
                                                     <span className="text-success">Normal (0)</span>
@@ -596,8 +596,8 @@ export default function SenderPoolPanel() {
                             &times;
                         </button>
                         <div className="gw-modal-header">
-                            <h3 id="add-sender-title">Tambah Nomor Pengirim Baru</h3>
-                            <p>Masukkan nomor WhatsApp agent/staff yang akan dipakai mengirim kode OTP ke pelanggan.</p>
+                            <h3 id="add-sender-title">Add New Sender Number</h3>
+                            <p>Enter the WhatsApp phone number of the sender device used to deliver OTP codes to customers.</p>
                         </div>
 
                         {error && <div className="alert error" role="alert">{error}</div>}
@@ -605,7 +605,7 @@ export default function SenderPoolPanel() {
                         <form onSubmit={handleAddSender} className="auth-form">
                             <div className="form-group">
                                 <label htmlFor="sender-phone">
-                                    Nomor WhatsApp Agent / Pengirim <span className="required">*</span>
+                                    Sender WhatsApp Phone Number <span className="required">*</span>
                                 </label>
                                 <div className="fx-field">
                                     <span className="fx-field-icon" aria-hidden="true">
@@ -625,7 +625,7 @@ export default function SenderPoolPanel() {
                                         autoFocus
                                     />
                                 </div>
-                                <small className="hint">Nomor WhatsApp aktif milik agent/CS yang disiapkan sebagai pengirim OTP.</small>
+                                <small className="hint">Active WhatsApp phone number used for outgoing OTP verification messages.</small>
                             </div>
 
                             <div className="form-group">
@@ -640,7 +640,7 @@ export default function SenderPoolPanel() {
                                         onChange={(e) => setNewLabel(e.target.value)}
                                     />
                                 </div>
-                                <small className="hint">Nama yang tampil di tabel agar Anda mudah mengenali pemilik nomor ini.</small>
+                                <small className="hint">A descriptive display name to easily identify this sender number in the dashboard.</small>
                             </div>
 
                             <label className="gw-check-row" htmlFor="autoCreate">
@@ -652,7 +652,7 @@ export default function SenderPoolPanel() {
                                 />
                                 <span>
                                     Siapkan sesi otomatis &amp; langsung buka layar tautan WhatsApp
-                                    <small>Setelah disimpan, Anda langsung bisa scan QR atau minta kode 8 karakter untuk nomor di atas.</small>
+                                    <small>Once saved, you can immediately scan the QR code or request an 8-character pairing code.</small>
                                 </span>
                             </label>
 
@@ -673,14 +673,14 @@ export default function SenderPoolPanel() {
                                                     id="sender-session-id"
                                                     type="text"
                                                     className="fx-input fx-input-mono"
-                                                    placeholder="Otomatis dari nomor WA bila dikosongkan"
+                                                    placeholder="Auto-generated from phone number if left empty"
                                                     value={newSessionId}
                                                     onChange={(e) => setNewSessionId(e.target.value)}
                                                     pattern="[a-zA-Z0-9_-]+"
                                                     title="Hanya huruf, angka, tanda hubung (-), atau garis bawah (_)"
                                                 />
                                             </div>
-                                            <small className="hint">Biarkan kosong agar sistem membuat kode sesi otomatis dari nomor telepon.</small>
+                                            <small className="hint">Leave empty to automatically generate a unique session identifier from the phone number.</small>
                                         </div>
 
                                         <div className="form-group">
@@ -754,8 +754,8 @@ export default function SenderPoolPanel() {
                                 Hubungkan WhatsApp: {activePairingSender.label || activePairingSender.session_id}
                             </h3>
                             <p>
-                                Nomor tertaut saat ini:{' '}
-                                <strong>{activePairingSender.phone_e164 || 'Belum ada nomor yang tertaut'}</strong>
+                                Currently linked phone number:{' '}
+                                <strong>{activePairingSender.phone_e164 || 'No phone number linked yet'}</strong>
                             </p>
                         </div>
 
@@ -822,10 +822,10 @@ export default function SenderPoolPanel() {
                                 <form onSubmit={handleRequestPairing}>
                                     <h4>Cara 2: Pakai Kode 8 Karakter</h4>
                                     <p className="hint">
-                                        Masukkan nomor WhatsApp HP pengirim untuk mendapatkan kode tautan tanpa kamera.
+                                        Enter the sender WhatsApp phone number to generate a pairing code without camera scanning.
                                     </p>
                                     <div className="form-group mt-2">
-                                        <label htmlFor="pool-pair-phone">Nomor HP Pengirim</label>
+                                        <label htmlFor="pool-pair-phone">Sender Phone Number</label>
                                         <div className="fx-field">
                                             <input
                                                 id="pool-pair-phone"
@@ -891,13 +891,13 @@ export default function SenderPoolPanel() {
                             <h3 id="test-send-title">
                                 Kirim Pesan Uji: {activeTestSender.label || activeTestSender.session_id}
                             </h3>
-                            <p>Pastikan nomor pengirim ini dapat mengirim pesan WhatsApp dengan lancar.</p>
+                            <p>Verify that this sender device can reliably deliver WhatsApp messages.</p>
                         </div>
 
                         <form onSubmit={handleTestSend} className="auth-form">
                             <div className="form-group">
                                 <label htmlFor="test-target-phone">
-                                    Nomor WhatsApp Tujuan <span className="required">*</span>
+                                    Recipient Phone Number <span className="required">*</span>
                                 </label>
                                 <div className="fx-field">
                                     <input

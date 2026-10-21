@@ -1,19 +1,22 @@
 <?php
 
-use AppHttpControllersAdminSenderPoolController;
-use AppHttpControllersAdminVerifiedMembersController;
-use AppHttpControllersAdminWhatsAppGatewayController;
-use AppHttpControllersBackOfficeWhatsAppMemberWebhookController;
-use AppHttpControllersWhatsAppOtpController;
-use IlluminateSupportFacadesRoute;
+use App\Http\Controllers\Admin\SenderPoolController;
+use App\Http\Controllers\Admin\VerifiedMembersController;
+use App\Http\Controllers\Admin\WhatsAppGatewayController;
+use App\Http\Controllers\BackOffice\WhatsAppMemberWebhookController;
+use App\Http\Controllers\WhatsAppOtpController;
+use Illuminate\Support\Facades\Route;
 
 /*
 |--------------------------------------------------------------------------
-| WhatsApp Gateway & OTP Routes
+| WhatsApp Gateway & OTP Routes (Add-on Package)
 |--------------------------------------------------------------------------
 |
+| Non-intrusive route registration.
 | Include this file in your routes/api.php:
-| require __DIR__ . '/whatsapp.php';
+|   require __DIR__ . '/whatsapp.php';
+|
+| Or let WhatsAppOtpServiceProvider load it automatically.
 |
 */
 
@@ -37,7 +40,7 @@ Route::prefix('v1/admin/whatsapp-gateway')
         Route::post('pairing-code', 'pairingCode');
     });
 
-// Multi-Sender Pool Management (Menu 1: Sesi & Nomor Pengirim WA)
+// Multi-Sender Pool Management (Menu 1: WhatsApp Sessions & Senders)
 Route::prefix('v1/admin/sender-pool')
     ->middleware(['auth:sanctum', 'role:super-admin|admin', 'throttle:60,1'])
     ->controller(SenderPoolController::class)
@@ -56,7 +59,7 @@ Route::prefix('v1/admin/sender-pool')
         Route::post('{id}/test-send', 'testSend');
     });
 
-// Verified Members List (Menu 2: Member Terverifikasi)
+// Verified Members List (Menu 2: Verified Members)
 Route::prefix('v1/admin/verified-members')
     ->middleware(['auth:sanctum', 'role:super-admin|admin', 'throttle:60,1'])
     ->controller(VerifiedMembersController::class)
@@ -65,7 +68,7 @@ Route::prefix('v1/admin/verified-members')
         Route::get('{id}', 'show');
     });
 
-// Nginx Subrequest Auth for Embedded Gateway Micro-Frontend (Menus 3-9: Dasbor, Obrolan, Webhook, Templat, etc.)
+// Nginx Subrequest Auth for Embedded Gateway Micro-Frontend (Menus 3-9: Dashboard, Chats, Webhooks, Templates, etc.)
 Route::get('v1/admin/gateway-auth', [WhatsAppGatewayController::class, 'authorizeDashboard'])
     ->middleware(['auth:sanctum', 'role:super-admin|admin']);
 

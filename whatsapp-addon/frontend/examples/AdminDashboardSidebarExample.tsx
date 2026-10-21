@@ -2,10 +2,10 @@ import React, { lazy, Suspense, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import SenderPoolPanel from '../components/SenderPoolPanel';
 import VerifiedMembersPanel from '../components/VerifiedMembersPanel';
-import { GATEWAY_BASE, GATEWAY_PAGES } from '../openwa/pages';
+import { GATEWAY_BASE, GATEWAY_PAGES } from '../backoffice/pages';
 
 // Lazy-loaded OpenWA embedded micro-frontend
-const OpenWaApp = lazy(() => import('../openwa/OpenWaApp'));
+const OpenWaApp = lazy(() => import('../backoffice/OpenWaApp'));
 
 /**
  * Example demonstrating how to configure the 9-item WhatsApp Gateway sidebar menu
@@ -24,19 +24,19 @@ export default function AdminDashboardSidebarExample() {
 
     /**
      * THE 9 WHATSAPP GATEWAY SIDEBAR MENU ITEMS:
-     * 1. Sesi & Nomor Pengirim WA (Native Panel: SenderPoolPanel)
-     * 2. Member Terverifikasi (Native Panel: VerifiedMembersPanel)
-     * 3. Dasbor (Embedded Micro-Frontend -> '')
-     * 4. Obrolan (Embedded Micro-Frontend -> 'chats')
+     * 1. WhatsApp Sessions & Senders (Native Panel: SenderPoolPanel)
+     * 2. Verified Members (Native Panel: VerifiedMembersPanel)
+     * 3. Dashboard (Embedded Micro-Frontend -> '')
+     * 4. Chats (Embedded Micro-Frontend -> 'chats')
      * 5. Webhook (Embedded Micro-Frontend -> 'webhooks')
-     * 6. Templat (Embedded Micro-Frontend -> 'templates')
-     * 7. Penguji Pesan (Embedded Micro-Frontend -> 'message-tester')
-     * 8. Plugin (Embedded Micro-Frontend -> 'plugins')
-     * 9. Log (Embedded Micro-Frontend -> 'logs')
+     * 6. Templates (Embedded Micro-Frontend -> 'templates')
+     * 7. Message Tester (Embedded Micro-Frontend -> 'message-tester')
+     * 8. Plugins (Embedded Micro-Frontend -> 'plugins')
+     * 9. Logs (Embedded Micro-Frontend -> 'logs')
      */
     const whatsAppGatewayMenuItems = [
-        { key: 'whatsapp', label: 'Sesi & Nomor Pengirim WA', type: 'native' },
-        { key: 'verified_members', label: 'Member Terverifikasi', type: 'native' },
+        { key: 'whatsapp', label: 'WhatsApp Sessions & Senders', type: 'native' },
+        { key: 'verified_members', label: 'Verified Members', type: 'native' },
         ...GATEWAY_PAGES.map((page) => ({
             key: `gw:${page.path}`,
             label: page.label,
@@ -93,8 +93,8 @@ export default function AdminDashboardSidebarExample() {
                 {/* 1. Sesi & Nomor Pengirim WA (Native Panel) */}
                 {activeKey === 'whatsapp' && (
                     <div className="space-y-4">
-                        <h1 className="text-2xl font-bold">Sesi & Nomor Pengirim WA</h1>
-                        <p className="text-slate-400">Kelola nomor pengirim, pairing QR code, dan auto-failover rotasi pesan.</p>
+                        <h1 className="text-2xl font-bold">WhatsApp Sessions & Senders</h1>
+                        <p className="text-slate-400">Manage sender numbers, QR code pairing, and automatic rotation failover.</p>
                         <SenderPoolPanel />
                     </div>
                 )}
@@ -102,8 +102,8 @@ export default function AdminDashboardSidebarExample() {
                 {/* 2. Member Terverifikasi (Native Panel) */}
                 {activeKey === 'verified_members' && (
                     <div className="space-y-4">
-                        <h1 className="text-2xl font-bold">Member Terverifikasi</h1>
-                        <p className="text-slate-400">Daftar pelanggan yang terverifikasi via nomor WhatsApp.</p>
+                        <h1 className="text-2xl font-bold">Verified Members</h1>
+                        <p className="text-slate-400">Customer list verified via WhatsApp phone OTP.</p>
                         <VerifiedMembersPanel />
                     </div>
                 )}
@@ -111,7 +111,7 @@ export default function AdminDashboardSidebarExample() {
                 {/* 3 - 9. Embedded Micro-Frontend Pages */}
                 {activeKey.startsWith('gw:') && (
                     <div className="h-full">
-                        <Suspense fallback={<div className="p-8 text-center text-slate-400">Memuat konsol gateway...</div>}>
+                        <Suspense fallback={<div className="p-8 text-center text-slate-400">Loading gateway console...</div>}>
                             <OpenWaApp />
                         </Suspense>
                     </div>

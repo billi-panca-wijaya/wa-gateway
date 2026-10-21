@@ -22,12 +22,12 @@ const newKey = () =>
 function errorMessage(err: unknown): { message: string; retryAfter?: number; code?: string } {
     if (Axios.isAxiosError(err)) {
         const data = err.response?.data as { message?: string; code?: string; retry_after?: number; errors?: Record<string, string[]> } | undefined;
-        if (!err.response) return { message: 'Tidak dapat terhubung ke server. Periksa koneksi Anda.' };
-        if (err.response.status === 419) return { message: 'Sesi halaman kedaluwarsa. Muat ulang halaman.' };
+        if (!err.response) return { message: 'Unable to connect to server. Please check your internet connection.' };
+        if (err.response.status === 419) return { message: 'Session expired. Please refresh the page.' };
         const firstField = data?.errors ? Object.values(data.errors)[0]?.[0] : undefined;
-        return { message: firstField ?? data?.message ?? 'Terjadi kesalahan. Coba lagi.', retryAfter: data?.retry_after, code: data?.code };
+        return { message: firstField ?? data?.message ?? 'An error occurred. Please try again.', retryAfter: data?.retry_after, code: data?.code };
     }
-    return { message: 'Terjadi kesalahan. Coba lagi.' };
+    return { message: 'An error occurred. Please try again.' };
 }
 
 /** Converts server timestamps to local deadlines relative to receipt, avoiding client clock skew. */
@@ -99,7 +99,7 @@ export default function WhatsAppOtpForm({ onDone, onStageChange }: { onDone?: ()
             const res = await axios.post('/api/v1/auth/whatsapp/resend-otp', { challenge_id: challenge.challenge_id }, { headers: { 'Idempotency-Key': idemKey.current } });
             setChallenge(toChallenge(res.data));
             setCode('');
-            setInfo('Kode baru telah dikirim. Hanya kode terbaru yang berlaku.');
+            setInfo('A new verification code has been sent. Only the latest code is valid.');
             idemKey.current = newKey();
         } catch (err) {
             const m = errorMessage(err);
@@ -165,7 +165,7 @@ export default function WhatsAppOtpForm({ onDone, onStageChange }: { onDone?: ()
         {!challenge ? (
             <form onSubmit={requestOtp} className="auth-form" noValidate>
                 <div className="form-group">
-                    <label htmlFor="phone">Nomor WhatsApp</label>
+                    <label htmlFor="phone">WhatsApp Phone Number</label>
                     <input
                         id="phone"
                         type="tel"
@@ -177,33 +177,33 @@ export default function WhatsAppOtpForm({ onDone, onStageChange }: { onDone?: ()
                         required
                         autoFocus
                     />
-                    <small className="hint">Nomor tanpa kode negara dianggap nomor Indonesia. Untuk negara lain awali dengan +kode negara.</small>
+                    <small className="hint">Numbers without a country code default to ID (+62). For international numbers, prefix with +country code.</small>
                 </div>
                 <button type="submit" className="btn btn-primary btn-block" disabled={busy || !phone.trim() || cooldown > 0}>
-                    {busy ? <span className="spinner"></span> : cooldown > 0 ? `Coba lagi dalam ${fmt(cooldown)}` : 'Kirim kode OTP'}
+                    {busy ? <span className="spinner"></span> : cooldown > 0 ? `Retry in ${fmt(cooldown)}` : 'Send Verification Code'}
                 </button>
             </form>
         ) : (
             <div className="auth-form">
                 <p className="otp-target">
-                    Kode dikirim ke <strong>{challenge.masked_phone}</strong>
+                    Code sent to <strong>{challenge.masked_phone}</strong>
                     {challenge.delivery_status === 'unknown' && (
-                        <><br /><small>Status pengiriman belum pasti. Jika kode tidak masuk, kirim ulang setelah hitungan selesai.</small></>
+                        <><br /><small>Delivery in progress. If the code does not arrive, request a resend when the countdown ends.</small></>
                     )}
                 </p>
-                <p className="hint">Buka aplikasi WhatsApp di ponsel Anda, baca pesan berisi kode, lalu ketik atau tempel di sini.</p>
+                <p className="hint">Open WhatsApp on your phone, find the verification message, and enter or paste the 6-digit code below.</p>
                 <OtpInput value={code} onChange={setCode} length={4} disabled={busy} invalid={!!error} />
                 <p className="otp-meta" aria-live="polite">
-                    {secs(challenge.expiresAtMs) > 0 ? `Kode berlaku ${fmt(secs(challenge.expiresAtMs))}` : 'Kode sudah kedaluwarsa. Minta kode baru.'}
+                    {secs(challenge.expiresAtMs) > 0 ? `Code expires in ${fmt(secs(challenge.expiresAtMs))}` : 'Code has expired. Request a new code.'}
                 </p>
                 <button type="button" className="btn btn-primary btn-block" disabled={busy || !/^\d{4}$/.test(code)} onClick={() => verify(code)}>
-                    {busy ? <span className="spinner"></span> : 'Verifikasi'}
+                    {busy ? <span className="spinner"></span> : 'Verify & Sign In'}
                 </button>
                 <div className="otp-actions">
                     <button type="button" className="text-link" onClick={resend} disabled={busy || secs(challenge.resendAtMs) > 0}>
-                        {secs(challenge.resendAtMs) > 0 ? `Kirim ulang dalam ${fmt(secs(challenge.resendAtMs))}` : 'Kirim ulang kode'}
+                        {secs(challenge.resendAtMs) > 0 ? `Resend code in ${fmt(secs(challenge.resendAtMs))}` : 'Resend Code'}
                     </button>
-                    <button type="button" className="text-link" onClick={changeNumber} disabled={busy}>Ubah nomor</button>
+                    <button type="button" className="text-link" onClick={changeNumber} disabled={busy}>Change Number</button>
                 </div>
             </div>
         )}

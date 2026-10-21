@@ -11,7 +11,7 @@ use Illuminate\Http\Request;
  * Controller for Back-Office integration to pull verified WhatsApp members.
  * Accessible by admins & super-admins via Sanctum auth.
  */
-class VerifiedMembersController extends Controller
+class WhatsAppVerifiedMembersController extends Controller
 {
     public function index(Request $request): JsonResponse
     {

@@ -46,7 +46,7 @@ const initialOf = (m: VerifiedMember) =>
     (m.name ?? m.phone_e164 ?? '?').replace('+', '').trim().charAt(0).toUpperCase() || '?';
 
 const errText = (err: unknown) =>
-    Axios.isAxiosError(err) ? ((err.response?.data as { message?: string })?.message ?? 'Permintaan gagal.') : 'Permintaan gagal.';
+    Axios.isAxiosError(err) ? ((err.response?.data as { message?: string })?.message ?? 'Request failed.') : 'Permintaan gagal.';
 
 export default function VerifiedMembersPanel() {
     const [members, setMembers] = useState<VerifiedMember[]>([]);
@@ -97,21 +97,21 @@ export default function VerifiedMembersPanel() {
                 <div className="stat-card glass-panel">
                     <span className="stat-accent accent-green" />
                     <div className="stat-details">
-                        <h3>Total Member Terverifikasi</h3>
+                        <h3>Total Verified Members</h3>
                         <p className="stat-number text-success">{stats?.total_verified ?? 0}</p>
                     </div>
                 </div>
                 <div className="stat-card glass-panel">
                     <span className="stat-accent accent-indigo" />
                     <div className="stat-details">
-                        <h3>Verifikasi Hari Ini</h3>
+                        <h3>Verifikasi Today</h3>
                         <p className="stat-number text-primary">{stats?.verified_today ?? 0}</p>
                     </div>
                 </div>
                 <div className="stat-card glass-panel">
                     <span className="stat-accent accent-amber" />
                     <div className="stat-details">
-                        <h3>7 Hari Terakhir</h3>
+                        <h3>Last 7 Days</h3>
                         <p className="stat-number">{stats?.verified_last_7_days ?? 0}</p>
                     </div>
                 </div>
@@ -130,7 +130,7 @@ export default function VerifiedMembersPanel() {
                             )}
                         </div>
                         <p className="gw-subtitle">
-                            Pelanggan yang telah berhasil login dan memverifikasi nomor WhatsApp mereka dengan kode OTP 6 digit.
+                            Customers who have successfully verified their WhatsApp phone number via 6-digit OTP.
                         </p>
                     </div>
 
@@ -145,7 +145,7 @@ export default function VerifiedMembersPanel() {
                             <input
                                 type="search"
                                 className="fx-input"
-                                placeholder="Cari nomor WhatsApp, nama, atau email..."
+                                placeholder="Search by WhatsApp number, name, or email..."
                                 value={search}
                                 onChange={(e) => setSearch(e.target.value)}
                                 onKeyDown={(e) => {
@@ -188,7 +188,7 @@ export default function VerifiedMembersPanel() {
                         <thead>
                             <tr>
                                 <th>Member</th>
-                                <th>Nomor WhatsApp</th>
+                                <th>WhatsApp Phone Number</th>
                                 <th>Tenant</th>
                                 <th>Waktu Verifikasi</th>
                                 <th>Login Terakhir</th>
@@ -214,8 +214,8 @@ export default function VerifiedMembersPanel() {
                                             </p>
                                             <p className="gw-empty-desc">
                                                 {debouncedSearch
-                                                    ? 'Coba masukkan sebagian nomor HP (mis. 812...) atau nama akun lain.'
-                                                    : 'Setiap pelanggan yang berhasil login menggunakan OTP WhatsApp akan otomatis tercatat di halaman ini.'}
+                                                    ? 'Try searching by phone number digits or customer name.'
+                                                    : 'All customers who log in via WhatsApp OTP will automatically appear here.'}
                                             </p>
                                         </div>
                                     </td>

@@ -15,7 +15,7 @@ use Illuminate\Validation\Rule;
  * Controller for managing the WhatsApp Sender Pool (multiple sender numbers).
  * Accessible by admins & super-admins.
  */
-class SenderPoolController extends Controller
+class WhatsAppSenderPoolController extends Controller
 {
     public function __construct(private readonly SenderPoolService $poolService) {}
 
@@ -50,7 +50,7 @@ class SenderPoolController extends Controller
 
         return response()->json([
             'status' => 'success',
-            'message' => 'Nomor pengirim berhasil ditambahkan ke pool.',
+            'message' => 'Sender number successfully added to the pool.',
             'data' => $sender,
         ], 201);
     }
@@ -90,7 +90,7 @@ class SenderPoolController extends Controller
 
         return response()->json([
             'status' => 'success',
-            'message' => 'Data pengirim berhasil diperbarui.',
+            'message' => 'Sender details successfully updated.',
             'data' => $sender,
         ]);
     }
@@ -104,7 +104,7 @@ class SenderPoolController extends Controller
 
         return response()->json([
             'status' => 'success',
-            'message' => 'Nomor pengirim berhasil dihapus dari pool.',
+            'message' => 'Sender number successfully removed from pool.',
         ]);
     }
 
@@ -115,7 +115,7 @@ class SenderPoolController extends Controller
 
         return response()->json([
             'status' => 'success',
-            'message' => "Status nomor diubah menjadi {$sender->status}.",
+            'message' => "Sender status updated to {$sender->status}.",
             'data' => $sender,
         ]);
     }
@@ -128,7 +128,7 @@ class SenderPoolController extends Controller
 
         return response()->json([
             'status' => 'success',
-            'message' => 'Status berhasil disinkronkan dengan gateway.',
+            'message' => 'Status successfully synchronized with gateway.',
             'data' => [
                 'sender' => $sender->fresh(),
                 'gateway' => $status,
@@ -207,14 +207,14 @@ class SenderPoolController extends Controller
         ]);
 
         $e164 = PhoneNumber::normalize($data['phone'], (string) config('whatsapp_otp.default_region', 'ID'));
-        $msg = $data['message'] ?? 'Tes pengiriman pesan dari pool sender: '.$sender->session_id;
+        $msg = $data['message'] ?? 'Test message from sender pool: '.$sender->session_id;
 
         $delivery = $this->poolService->testSend($sender, $e164, $msg);
 
         if ($delivery->status === DeliveryResult::FAILED) {
             return response()->json([
                 'status' => 'error',
-                'message' => 'Pengiriman pesan gagal: '.($delivery->errorCode ?? 'UNKNOWN'),
+                'message' => 'Message delivery failed: '.($delivery->errorCode ?? 'UNKNOWN'),
                 'data' => [
                     'delivery_status' => $delivery->status,
                     'error_code' => $delivery->errorCode,
@@ -224,7 +224,7 @@ class SenderPoolController extends Controller
 
         return response()->json([
             'status' => 'success',
-            'message' => 'Pesan uji berhasil dikirim ke gateway.',
+            'message' => 'Test message sent successfully to gateway.',
             'data' => [
                 'delivery_status' => $delivery->status,
                 'message_id' => $delivery->providerMessageId,

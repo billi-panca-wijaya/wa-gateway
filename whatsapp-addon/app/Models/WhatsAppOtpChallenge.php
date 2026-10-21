@@ -4,7 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 
-class OtpChallenge extends Model
+class WhatsAppOtpChallenge extends Model
 {
     public const PENDING = 'pending';
     public const VERIFIED = 'verified';

@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Crypt;
 use Throwable;
 
-class SenderPool extends Model
+class WhatsAppSenderPool extends Model
 {
     use HasFactory;
 
