@@ -13,7 +13,7 @@ return [
     // Region applied to numbers typed without a leading "+" (e.g. 08xx for ID).
     'default_region' => env('WA_OTP_DEFAULT_REGION', 'ID'),
 
-    'code_length' => (int) env('WA_OTP_CODE_LENGTH', 4),
+    'code_length' => (int) env('WA_OTP_CODE_LENGTH', 6),
     'ttl_seconds' => (int) env('WA_OTP_TTL_SECONDS', 300),
     'resend_cooldown_seconds' => (int) env('WA_OTP_RESEND_COOLDOWN_SECONDS', 30),
     'max_attempts' => (int) env('WA_OTP_MAX_ATTEMPTS', 5),

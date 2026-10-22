@@ -55,14 +55,14 @@ class WhatsAppOtpController extends Controller
 
     public function verifyOtp(Request $request): JsonResponse
     {
-        $codeLength = (int) config('whatsapp_otp.code_length', 4);
+        $codeLength = (int) config('whatsapp_otp.code_length', 6);
         $data = $request->validate([
             'challenge_id' => ['required', 'string', 'max:64'],
             'code' => ['required', 'string', 'regex:/^\d{' . $codeLength . '}$/'],
         ]);
 
         if (! $request->hasSession()) {
-            throw new OtpException('STATEFUL_ORIGIN_REQUIRED', 'Permintaan harus berasal dari aplikasi web yang terdaftar.', 400);
+            throw new OtpException('STATEFUL_ORIGIN_REQUIRED', 'Request must originate from a registered web application.', 400);
         }
 
         $result = $this->otp->verify(
@@ -100,7 +100,7 @@ class WhatsAppOtpController extends Controller
     {
         $key = $request->header('Idempotency-Key') ?? ($data['idempotency_key'] ?? null);
         if ($key !== null && ! preg_match('/^[\x21-\x7E]{1,128}$/', $key)) {
-            throw new OtpException('IDEMPOTENCY_KEY_INVALID', 'Idempotency key tidak valid.', 422);
+            throw new OtpException('IDEMPOTENCY_KEY_INVALID', 'Invalid idempotency key.', 422);
         }
 
         return $key;

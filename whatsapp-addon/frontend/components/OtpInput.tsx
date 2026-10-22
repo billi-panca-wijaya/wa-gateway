@@ -14,7 +14,7 @@ interface OtpInputProps {
  * Supports typing, paste of the full code, backspace, arrow keys and the
  * one-time-code autocomplete hint (manual entry always works).
  */
-export default function OtpInput({ value, onChange, length = 4, disabled, invalid }: OtpInputProps) {
+export default function OtpInput({ value, onChange, length = 6, disabled, invalid }: OtpInputProps) {
     const refs = useRef<Array<HTMLInputElement | null>>([]);
     const digits = Array.from({ length }, (_, i) => (value[i] ?? '').trim());
     const emit = (next: string[]) => onChange(next.map((c) => c || ' ').join('').trimEnd());
@@ -57,7 +57,7 @@ export default function OtpInput({ value, onChange, length = 4, disabled, invali
 
     return (
         <fieldset className="otp-boxes" disabled={disabled}>
-            <legend className="sr-only">Kode OTP {length} digit</legend>
+            <legend className="sr-only">OTP Code — {length} digits</legend>
             {digits.map((d, i) => (
                 <input
                     key={i}
@@ -68,7 +68,7 @@ export default function OtpInput({ value, onChange, length = 4, disabled, invali
                     pattern="[0-9]*"
                     autoComplete={i === 0 ? 'one-time-code' : 'off'}
                     maxLength={i === 0 ? length : 1}
-                    aria-label={`Digit ${i + 1} dari ${length}`}
+                    aria-label={`Digit ${i + 1} of ${length}`}
                     aria-invalid={invalid || undefined}
                     value={d}
                     autoFocus={i === 0}
