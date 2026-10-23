@@ -287,7 +287,6 @@ export default function SenderPoolPanel() {
         try {
             await axios.get('/sanctum/csrf-cookie');
             await axios.post(`/api/v1/admin/sender-pool/${activePairingSender.id}/${action}`);
-            const labelMap = { start: 'dimulai', stop: 'dihentikan', logout: 'dilepas tautannya' };
             setNotice(`Session "${activePairingSender.label || activePairingSender.session_id}" successfully executed ${action}.`);
             await loadSenders();
             if (action === 'start') {

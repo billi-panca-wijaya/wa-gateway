@@ -1,11 +1,12 @@
 <?php
 
-namespace App\Http\Controllers\Api\Admin;
+namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Services\WhatsAppOtp\OtpException;
 use App\Services\WhatsAppOtp\PhoneNumber;
 use App\Services\WhatsAppOtp\SenderPoolService;
+use App\Services\WhatsAppOtp\TenantResolver;
 use App\Services\WhatsAppOtp\Transport\DeliveryResult;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -21,7 +22,7 @@ class WhatsAppSenderPoolController extends Controller
 
     public function index(Request $request): JsonResponse
     {
-        $tenantKey = $request->query('tenant_key') ?? config('whatsapp_otp.default_tenant', 'default');
+        $tenantKey = app(TenantResolver::class)->forAdmin($request);
         $senders = $this->poolService->listSenders($tenantKey);
 
         return response()->json([
@@ -32,7 +33,7 @@ class WhatsAppSenderPoolController extends Controller
 
     public function store(Request $request): JsonResponse
     {
-        $tenantKey = $request->input('tenant_key') ?? config('whatsapp_otp.default_tenant', 'default');
+        $tenantKey = app(TenantResolver::class)->forAdmin($request);
 
         $data = $request->validate([
             'phone' => ['nullable', 'string', 'max:32', 'required_without:session_id'],
@@ -57,7 +58,7 @@ class WhatsAppSenderPoolController extends Controller
 
     public function show(Request $request, int $id): JsonResponse
     {
-        $tenantKey = $request->query('tenant_key') ?? config('whatsapp_otp.default_tenant', 'default');
+        $tenantKey = app(TenantResolver::class)->forAdmin($request);
         $sender = $this->poolService->getSender($tenantKey, $id);
 
         $liveStatus = null;
@@ -77,7 +78,7 @@ class WhatsAppSenderPoolController extends Controller
 
     public function update(Request $request, int $id): JsonResponse
     {
-        $tenantKey = $request->input('tenant_key') ?? config('whatsapp_otp.default_tenant', 'default');
+        $tenantKey = app(TenantResolver::class)->forAdmin($request);
 
         $data = $request->validate([
             'phone' => ['nullable', 'string', 'max:32'],
@@ -97,7 +98,7 @@ class WhatsAppSenderPoolController extends Controller
 
     public function destroy(Request $request, int $id): JsonResponse
     {
-        $tenantKey = $request->query('tenant_key') ?? config('whatsapp_otp.default_tenant', 'default');
+        $tenantKey = app(TenantResolver::class)->forAdmin($request);
         $deleteInOpenWa = $request->boolean('delete_session', false);
 
         $this->poolService->deleteSender($tenantKey, $id, $deleteInOpenWa);
@@ -110,7 +111,7 @@ class WhatsAppSenderPoolController extends Controller
 
     public function toggle(Request $request, int $id): JsonResponse
     {
-        $tenantKey = $request->input('tenant_key') ?? config('whatsapp_otp.default_tenant', 'default');
+        $tenantKey = app(TenantResolver::class)->forAdmin($request);
         $sender = $this->poolService->toggleStatus($tenantKey, $id);
 
         return response()->json([
@@ -122,7 +123,7 @@ class WhatsAppSenderPoolController extends Controller
 
     public function sync(Request $request, int $id): JsonResponse
     {
-        $tenantKey = $request->input('tenant_key') ?? config('whatsapp_otp.default_tenant', 'default');
+        $tenantKey = app(TenantResolver::class)->forAdmin($request);
         $sender = $this->poolService->getSender($tenantKey, $id);
         $status = $this->poolService->syncSenderStatus($sender);
 
@@ -138,7 +139,7 @@ class WhatsAppSenderPoolController extends Controller
 
     public function start(Request $request, int $id): JsonResponse
     {
-        $tenantKey = $request->input('tenant_key') ?? config('whatsapp_otp.default_tenant', 'default');
+        $tenantKey = app(TenantResolver::class)->forAdmin($request);
         $sender = $this->poolService->getSender($tenantKey, $id);
         $result = $this->poolService->startSession($sender);
 
@@ -147,7 +148,7 @@ class WhatsAppSenderPoolController extends Controller
 
     public function stop(Request $request, int $id): JsonResponse
     {
-        $tenantKey = $request->input('tenant_key') ?? config('whatsapp_otp.default_tenant', 'default');
+        $tenantKey = app(TenantResolver::class)->forAdmin($request);
         $sender = $this->poolService->getSender($tenantKey, $id);
         $result = $this->poolService->stopSession($sender);
 
@@ -156,7 +157,7 @@ class WhatsAppSenderPoolController extends Controller
 
     public function logout(Request $request, int $id): JsonResponse
     {
-        $tenantKey = $request->input('tenant_key') ?? config('whatsapp_otp.default_tenant', 'default');
+        $tenantKey = app(TenantResolver::class)->forAdmin($request);
         $sender = $this->poolService->getSender($tenantKey, $id);
         $result = $this->poolService->logoutSession($sender);
 
@@ -165,7 +166,7 @@ class WhatsAppSenderPoolController extends Controller
 
     public function qr(Request $request, int $id): JsonResponse
     {
-        $tenantKey = $request->query('tenant_key') ?? config('whatsapp_otp.default_tenant', 'default');
+        $tenantKey = app(TenantResolver::class)->forAdmin($request);
         $sender = $this->poolService->getSender($tenantKey, $id);
         $qr = $this->poolService->getQrCode($sender);
 
@@ -174,7 +175,7 @@ class WhatsAppSenderPoolController extends Controller
 
     public function pairingCode(Request $request, int $id): JsonResponse
     {
-        $tenantKey = $request->input('tenant_key') ?? config('whatsapp_otp.default_tenant', 'default');
+        $tenantKey = app(TenantResolver::class)->forAdmin($request);
         $sender = $this->poolService->getSender($tenantKey, $id);
 
         $data = $request->validate(['phone' => ['required', 'string', 'max:32']]);
@@ -198,7 +199,7 @@ class WhatsAppSenderPoolController extends Controller
 
     public function testSend(Request $request, int $id): JsonResponse
     {
-        $tenantKey = $request->input('tenant_key') ?? config('whatsapp_otp.default_tenant', 'default');
+        $tenantKey = app(TenantResolver::class)->forAdmin($request);
         $sender = $this->poolService->getSender($tenantKey, $id);
 
         $data = $request->validate([

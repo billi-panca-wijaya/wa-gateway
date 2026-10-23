@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Controllers\Api\Admin;
+namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Services\WhatsAppOtp\OpenWaSessionClient;
@@ -8,6 +8,7 @@ use App\Services\WhatsAppOtp\OtpException;
 use App\Services\WhatsAppOtp\PhoneNumber;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 use Illuminate\Support\Str;
 
 /**
@@ -75,7 +76,7 @@ class WhatsAppGatewayController extends Controller
      * the gateway key, cross-site requests are refused: a foreign Origin (CSRF / cross-site WebSocket)
      * or a state-changing call without the XHR header the embedded dashboard always sends.
      */
-    public function authorizeDashboard(Request $request): \Illuminate\Http\Response
+    public function authorizeDashboard(Request $request): Response
     {
         // Same list Sanctum trusts for cookie sessions (host[:port]); Host may be rewritten by Apache.
         $origin = $request->headers->get('Origin');

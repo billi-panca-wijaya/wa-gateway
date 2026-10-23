@@ -23,7 +23,7 @@ class MockTransport implements OtpTransport
         return 'mock';
     }
 
-    public function send(string $phoneE164, #[\SensitiveParameter] string $message, string $idempotencyKey): DeliveryResult
+    public function send(string $phoneE164, #[\SensitiveParameter] string $message, string $idempotencyKey, ?string $tenantKey = null): DeliveryResult
     {
         if (self::$forceStatus === DeliveryResult::FAILED) {
             return DeliveryResult::failed('MOCK_FAILED');
@@ -49,7 +49,7 @@ class MockTransport implements OtpTransport
         $messages = self::messages($phoneE164);
         $last = end($messages);
 
-        return $last && preg_match('/\b(\d{6})\b/', $last['message'], $m) ? $m[1] : null;
+        return $last && preg_match('/\b(\d{4})\b/', $last['message'], $m) ? $m[1] : null;
     }
 
     private static function key(string $phoneE164): string

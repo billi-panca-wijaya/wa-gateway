@@ -24,7 +24,7 @@ class OpenWaTransport implements OtpTransport
         return $this->config['session_id'] ?? null;
     }
 
-    public function send(string $phoneE164, #[\SensitiveParameter] string $message, string $idempotencyKey): DeliveryResult
+    public function send(string $phoneE164, #[\SensitiveParameter] string $message, string $idempotencyKey, ?string $tenantKey = null): DeliveryResult
     {
         $session = $this->config['session_id'] ?? null;
         if (empty($this->config['base_url']) || empty($this->config['api_key']) || empty($session)) {

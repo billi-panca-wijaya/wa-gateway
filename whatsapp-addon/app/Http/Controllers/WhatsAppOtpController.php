@@ -1,8 +1,7 @@
 <?php
 
-namespace App\Http\Controllers\Api;
+namespace App\Http\Controllers;
 
-use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Services\WhatsAppOtp\OtpException;
 use App\Services\WhatsAppOtp\OtpService;
@@ -55,10 +54,10 @@ class WhatsAppOtpController extends Controller
 
     public function verifyOtp(Request $request): JsonResponse
     {
-        $codeLength = (int) config('whatsapp_otp.code_length', 6);
+        $codeLength = 4;
         $data = $request->validate([
             'challenge_id' => ['required', 'string', 'max:64'],
-            'code' => ['required', 'string', 'regex:/^\d{' . $codeLength . '}$/'],
+            'code' => ['required', 'string', 'regex:/^\d{'.$codeLength.'}$/D'],
         ]);
 
         if (! $request->hasSession()) {

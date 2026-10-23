@@ -1,7 +1,7 @@
-import React, { lazy, Suspense, useState } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import SenderPoolPanel from '../components/SenderPoolPanel';
-import VerifiedMembersPanel from '../components/VerifiedMembersPanel';
+import SenderPoolPanel from '../components/WhatsAppSenderPoolPanel';
+import VerifiedMembersPanel from '../components/WhatsAppVerifiedMembersPanel';
 import { GATEWAY_BASE, GATEWAY_PAGES } from '../backoffice/pages';
 
 // Lazy-loaded OpenWA embedded micro-frontend

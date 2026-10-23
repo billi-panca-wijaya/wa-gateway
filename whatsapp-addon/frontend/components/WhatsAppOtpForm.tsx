@@ -45,7 +45,7 @@ function toChallenge(data: any): Challenge {
 }
 
 
-/** WhatsApp OTP login form (phone -> 6-digit code). Used by the login popup and /login/whatsapp. */
+/** WhatsApp OTP login form (phone -> 4-digit code). Used by the login popup and /login/whatsapp. */
 export default function WhatsAppOtpForm({ onDone, onStageChange }: { onDone?: () => void; onStageChange?: (codeSent: boolean) => void }) {
     const { checkAuth } = useAuth();
     const navigate = useNavigate();
@@ -112,7 +112,7 @@ export default function WhatsAppOtpForm({ onDone, onStageChange }: { onDone?: ()
     };
 
     const verify = async (value: string) => {
-        if (!challenge || busy || !/^\d{6}$/.test(value)) return;
+        if (!challenge || busy || !/^\d{4}$/.test(value)) return;
         lastSubmitted.current = value;
         setBusy(true);
         setError('');
@@ -133,7 +133,7 @@ export default function WhatsAppOtpForm({ onDone, onStageChange }: { onDone?: ()
     };
 
     useEffect(() => {
-        if (/^\d{6}$/.test(code) && code !== lastSubmitted.current) verify(code);
+        if (/^\d{4}$/.test(code) && code !== lastSubmitted.current) verify(code);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [code]);
 
@@ -191,12 +191,12 @@ export default function WhatsAppOtpForm({ onDone, onStageChange }: { onDone?: ()
                         <><br /><small>Delivery in progress. If the code does not arrive, request a resend when the countdown ends.</small></>
                     )}
                 </p>
-                <p className="hint">Open WhatsApp on your phone, find the verification message, and enter or paste the 6-digit code below.</p>
-                <OtpInput value={code} onChange={setCode} length={6} disabled={busy} invalid={!!error} />
+                <p className="hint">Open WhatsApp on your phone, find the verification message, and enter or paste the 4-digit code below.</p>
+                <OtpInput value={code} onChange={setCode} length={4} disabled={busy} invalid={!!error} />
                 <p className="otp-meta" aria-live="polite">
                     {secs(challenge.expiresAtMs) > 0 ? `Code expires in ${fmt(secs(challenge.expiresAtMs))}` : 'Code has expired. Request a new code.'}
                 </p>
-                <button type="button" className="btn btn-primary btn-block" disabled={busy || !/^\d{6}$/.test(code)} onClick={() => verify(code)}>
+                <button type="button" className="btn btn-primary btn-block" disabled={busy || !/^\d{4}$/.test(code)} onClick={() => verify(code)}>
                     {busy ? <span className="spinner"></span> : 'Verify & Sign In'}
                 </button>
                 <div className="otp-actions">

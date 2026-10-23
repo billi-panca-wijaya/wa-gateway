@@ -10,11 +10,11 @@ interface OtpInputProps {
 }
 
 /**
- * Six visual boxes. The value is always a string so leading zeros are preserved.
+ * Four visual boxes. The value is always a string so leading zeros are preserved.
  * Supports typing, paste of the full code, backspace, arrow keys and the
  * one-time-code autocomplete hint (manual entry always works).
  */
-export default function OtpInput({ value, onChange, length = 6, disabled, invalid }: OtpInputProps) {
+export default function OtpInput({ value, onChange, length = 4, disabled, invalid }: OtpInputProps) {
     const refs = useRef<Array<HTMLInputElement | null>>([]);
     const digits = Array.from({ length }, (_, i) => (value[i] ?? '').trim());
     const emit = (next: string[]) => onChange(next.map((c) => c || ' ').join('').trimEnd());

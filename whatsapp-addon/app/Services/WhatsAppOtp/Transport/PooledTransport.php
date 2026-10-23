@@ -29,9 +29,11 @@ class PooledTransport implements OtpTransport
         return $this->lastUsedSender ?? ($this->defaultConfig['session_id'] ?? null);
     }
 
-    public function send(string $phoneE164, #[\SensitiveParameter] string $message, string $idempotencyKey): DeliveryResult
+    public function send(string $phoneE164, #[\SensitiveParameter] string $message, string $idempotencyKey, ?string $tenantKey = null): DeliveryResult
     {
-        $tenantKey = (string) config('whatsapp_otp.default_tenant', 'default');
+        $defaultTenant = (string) config('whatsapp_otp.default_tenant', 'default');
+        $tenantKey ??= $defaultTenant;
+        $this->lastUsedSender = null;
         $poolEnabled = (bool) config('whatsapp_otp.pool.enabled', true);
 
         $activeSenders = $poolEnabled
@@ -40,6 +42,9 @@ class PooledTransport implements OtpTransport
 
         // Fallback to legacy single-session if pool is empty or disabled
         if ($activeSenders->isEmpty()) {
+            if ($tenantKey !== $defaultTenant) {
+                return DeliveryResult::failed('NO_TENANT_SENDERS');
+            }
             $fallbackTransport = new OpenWaTransport($this->defaultConfig);
             $this->lastUsedSender = $fallbackTransport->senderRef();
 

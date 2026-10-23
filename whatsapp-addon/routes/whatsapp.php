@@ -1,8 +1,8 @@
 <?php
 
-use App\Http\Controllers\Admin\SenderPoolController;
-use App\Http\Controllers\Admin\VerifiedMembersController;
 use App\Http\Controllers\Admin\WhatsAppGatewayController;
+use App\Http\Controllers\Admin\WhatsAppSenderPoolController as SenderPoolController;
+use App\Http\Controllers\Admin\WhatsAppVerifiedMembersController as VerifiedMembersController;
 use App\Http\Controllers\BackOffice\WhatsAppMemberWebhookController;
 use App\Http\Controllers\WhatsAppOtpController;
 use Illuminate\Support\Facades\Route;
@@ -16,12 +16,12 @@ use Illuminate\Support\Facades\Route;
 | Include this file in your routes/api.php:
 |   require __DIR__ . '/whatsapp.php';
 |
-| Or let WhatsAppOtpServiceProvider load it automatically.
+| Register this file once under the API middleware and /api prefix.
 |
 */
 
 // 1. Customer OTP Endpoints (Public + Rate-Limited)
-Route::prefix('v1/whatsapp')->middleware('throttle:60,1')->group(function () {
+Route::prefix('v1/auth/whatsapp')->middleware('throttle:60,1')->group(function () {
     Route::post('request-otp', [WhatsAppOtpController::class, 'requestOtp']);
     Route::post('verify-otp', [WhatsAppOtpController::class, 'verifyOtp']);
     Route::post('resend-otp', [WhatsAppOtpController::class, 'resendOtp']);
@@ -50,7 +50,8 @@ Route::prefix('v1/admin/sender-pool')
         Route::get('{id}', 'show');
         Route::put('{id}', 'update');
         Route::delete('{id}', 'destroy');
-        Route::get('{id}/status', 'status');
+        Route::post('{id}/sync', 'sync');
+        Route::post('{id}/toggle', 'toggle');
         Route::get('{id}/qr', 'qr');
         Route::post('{id}/pairing-code', 'pairingCode');
         Route::post('{id}/start', 'start');

@@ -2,7 +2,7 @@
 
 namespace App\Services\WhatsAppOtp;
 
-use App\Models\SenderPool;
+use App\Models\WhatsAppSenderPool as SenderPool;
 use App\Services\WhatsAppOtp\Transport\DeliveryResult;
 use App\Services\WhatsAppOtp\Transport\OpenWaTransport;
 use Illuminate\Database\Eloquent\Collection;
@@ -320,11 +320,10 @@ class SenderPoolService
     public function recordFailure(SenderPool $sender, string $reason): void
     {
         $autoSuspend = (bool) config('whatsapp_otp.pool.auto_suspend_on_fail', true);
-        $threshold = (int) config('whatsapp_otp.pool.failover_max_retries', 3);
 
         $sender->increment('fail_count');
 
-        if ($autoSuspend || $sender->fail_count >= $threshold) {
+        if ($autoSuspend) {
             $sender->update([
                 'status' => 'suspended',
                 'suspended_at' => now(),

@@ -1,11 +1,11 @@
 <?php
 
-namespace AppHttpControllersBackOffice;
+namespace App\Http\Controllers\BackOffice;
 
-use AppHttpControllersController;
-use IlluminateHttpJsonResponse;
-use IlluminateHttpRequest;
-use IlluminateSupportFacadesLog;
+use App\Http\Controllers\Controller;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 
 /**
  * Controller to receive incoming webhooks when a customer verifies their WhatsApp number.

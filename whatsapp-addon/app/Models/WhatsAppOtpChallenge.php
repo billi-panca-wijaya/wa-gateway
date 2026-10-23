@@ -6,11 +6,18 @@ use Illuminate\Database\Eloquent\Model;
 
 class WhatsAppOtpChallenge extends Model
 {
+    protected $table = 'otp_challenges';
+
     public const PENDING = 'pending';
+
     public const VERIFIED = 'verified';
+
     public const EXPIRED = 'expired';
+
     public const LOCKED = 'locked';
+
     public const SUPERSEDED = 'superseded';
+
     public const CANCELLED = 'cancelled';
 
     public $incrementing = false;
@@ -35,6 +42,6 @@ class WhatsAppOtpChallenge extends Model
 
     public function deliveries()
     {
-        return $this->hasMany(OtpDelivery::class, 'challenge_id');
+        return $this->hasMany(WhatsAppOtpDelivery::class, 'challenge_id');
     }
 }

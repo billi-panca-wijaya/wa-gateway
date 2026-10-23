@@ -9,6 +9,15 @@ use Illuminate\Http\Request;
  */
 class TenantResolver
 {
+    public function forAdmin(Request $request): string
+    {
+        $tenant = (string) ($request->user()?->tenant_key ?? config('whatsapp_otp.default_tenant', 'default'));
+        $requested = $request->input('tenant_key');
+        abort_if($requested !== null && (! is_string($requested) || $requested !== $tenant), 403, 'Tenant access denied.');
+
+        return $tenant;
+    }
+
     public function resolve(Request $request): string
     {
         $map = [];

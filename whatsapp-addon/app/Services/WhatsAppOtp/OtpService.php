@@ -2,9 +2,9 @@
 
 namespace App\Services\WhatsAppOtp;
 
-use App\Models\OtpChallenge;
-use App\Models\OtpDelivery;
 use App\Models\User;
+use App\Models\WhatsAppOtpChallenge as OtpChallenge;
+use App\Models\WhatsAppOtpDelivery as OtpDelivery;
 use App\Services\WhatsAppOtp\Transport\DeliveryResult;
 use App\Services\WhatsAppOtp\Transport\OtpTransport;
 use Illuminate\Database\UniqueConstraintViolationException;
@@ -161,7 +161,7 @@ class OtpService
             }
 
             $id = bin2hex(random_bytes(20));
-            $len = (int) config('whatsapp_otp.code_length', 6);
+            $len = 4;
             $maxNum = (10 ** $len) - 1;
             $code = str_pad((string) random_int(0, $maxNum), $len, '0', STR_PAD_LEFT);
             $now = now();
@@ -200,7 +200,7 @@ class OtpService
                 throw OtpException::make('REQUEST_IN_PROGRESS', 409);
             }
 
-            $result = $this->transport->send($phone, $this->message($code, $challenge->expires_at->diffInMinutes($now, true)), $id);
+            $result = $this->transport->send($phone, $this->message($code, $challenge->expires_at->diffInMinutes($now, true)), $id, $tenant);
             unset($code);
 
             OtpDelivery::create([

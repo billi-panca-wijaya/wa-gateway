@@ -1,9 +1,11 @@
+> Member website login uses exactly **4 numeric digits**, including leading zeros (for example `0123`). Sender pairing is a separate gateway flow; do not shorten its pairing code. `WA_OTP_CODE_LENGTH` is no longer used: the member OTP length is fixed in code. Rebuild frontend assets and refresh Laravel's config cache when deploying this change. Existing challenges with the previous length must expire before retrying.
+
 # 🚀 WhatsApp API Gateway & Drop-in Laravel Add-on
 
 [English](README.md) | [Bahasa Indonesia](README.id.md)
 
 A complete, self-hosted **WhatsApp API Gateway** and **non-intrusive drop-in Add-on for Laravel**.
-Easily add **WhatsApp OTP Customer Login** and a **Multi-Sender Device Pool Back-Office** to your **existing Laravel website** in under 5 minutes — with a **100% Zero-Overwrite Guarantee**.
+Easily add **WhatsApp OTP Customer Login** and a **Multi-Sender Device Pool Back-Office** to your **existing Laravel website** using isolated add-on files and a reviewed host integration.
 
 ---
 
@@ -31,7 +33,7 @@ Easily add **WhatsApp OTP Customer Login** and a **Multi-Sender Device Pool Back
 This repository provides a two-part ecosystem:
 1. **Self-Hosted WhatsApp Gateway Engine**: Runs via Docker (OpenWA v0.24.0) using the battle-tested Baileys engine. **Zero per-message fees**, completely self-hosted, supports multi-session socket connections.
 2. **Drop-in Laravel Add-on (`whatsapp-addon/`)**: A modular package you simply copy into your existing Laravel project. It provides:
-   - **Customer Login via 6-digit WhatsApp OTP**: Passwordless, frictionless login.
+   - **Customer Login via 4-digit WhatsApp OTP**: Passwordless, frictionless login.
    - **Multi-Device Sender Pool**: Attach multiple staff/agent WhatsApp numbers. The system distributes OTP delivery via **Round-Robin** and automatically switches to another active number if one disconnects.
    - **9 Back-Office Management Menus**: Full admin UI for sender devices, logs, webhooks, templates, and verified members.
 
@@ -39,15 +41,14 @@ This repository provides a two-part ecosystem:
 
 ## 🛡️ 2. Zero-Overwrite Guarantee
 
-**Your existing Laravel website stays 100% intact.**
-Every file and folder in this add-on has unique prefixes (`WhatsApp`, `whatsapp_`, `0001_wa_`) and dedicated namespaces. **It will NEVER overwrite, modify, or delete any default Laravel file.**
+**Preserve the existing Laravel website and its authentication flows.**
+Core controllers and models use `WhatsApp*` names; services use the `WhatsAppOtp` namespace. Never overwrite host files. Legacy generic aliases are optional. Review the User model contract, routes, and migrations before integrating.
 
 | Laravel Default File in Your Project | What This Add-on Uses Instead | Can It Overwrite Your File? |
 | :--- | :--- | :--- |
 | `app/Http/Controllers/Controller.php` | `app/Http/Controllers/WhatsAppOtpController.php` | ❌ **NEVER** |
 | `app/Models/User.php` | `app/Models/WhatsAppOtpChallenge.php`, `WhatsAppSenderPool.php` | ❌ **NEVER** |
 | `routes/api.php` & `routes/web.php` | `routes/whatsapp.php` | ❌ **NEVER** |
-| `config/app.php` & `config/auth.php` | `config/whatsapp_gateway.php`, `config/whatsapp_otp.php` | ❌ **NEVER** |
 | Existing User Migrations | `database/migrations/0001_wa_users.php` (additive columns only) | ❌ **NEVER** |
 | Default Frontend Layouts | `frontend/components/WhatsAppOtpForm.tsx`, `frontend/backoffice/*` | ❌ **NEVER** |
 
@@ -66,7 +67,7 @@ The system connects your customer, your existing Laravel backend, the gateway en
                  ▼
 ┌────────────────────────────────────────────────────────┐
 │             Your Existing Laravel Backend              │
-│  - Generates cryptographically secure 6-digit OTP      │
+│  - Generates cryptographically secure 4-digit OTP      │
 │  - Stores SHA-256 HMAC hash in DB (otp_challenges)     │
 │  - Selects active device from SenderPool (Round-Robin) │
 └────────────────┬───────────────────────────────────────┘
@@ -80,7 +81,7 @@ The system connects your customer, your existing Laravel backend, the gateway en
                  ▼
 ┌─────────────────────────────────┐       ┌───────────────────────────────┐
 │        WhatsApp Servers         │ ────> │ Customer WhatsApp Mobile App  │
-│                                 │       │ (Receives 6-digit OTP code)   │
+│                                 │       │ (Receives 4-digit OTP code)   │
 └─────────────────────────────────┘       └───────────────────────────────┘
 ```
 
@@ -94,10 +95,10 @@ Here is the straightforward, non-convoluted authentication process:
 flowchart TD
     Start([📱 Customer Enters Phone Number]) --> Step1[Frontend submits phone to Laravel Backend]
     Step1 --> Step2[Backend validates number & rate-limits]
-    Step2 --> Step3[Generate 6-digit OTP & Store HMAC hash in DB]
+    Step2 --> Step3[Generate 4-digit OTP & Store HMAC hash in DB]
     Step3 --> Step4[Select active sender from SenderPool & dispatch via Gateway]
-    Step4 --> Step5[Customer receives WhatsApp message with 6-digit code]
-    Step5 --> Step6[Customer enters 6-digit code on website form]
+    Step4 --> Step5[Customer receives WhatsApp message with 4-digit code]
+    Step5 --> Step6[Customer enters 4-digit code on website form]
     Step6 --> Step7{Backend verifies code with timing-safe HMAC}
     
     Step7 -- Invalid / Expired Code --> Error[Show Error Message & Cooldown Timer]
@@ -111,9 +112,9 @@ flowchart TD
 
 ### Plain-Language Breakdown:
 1. **Request OTP**: Customer inputs their mobile number on the login modal.
-2. **Dispatch**: The backend generates a 6-digit code, saves only its peppered HMAC hash in `otp_challenges`, and dispatches the message via an active WhatsApp sender.
+2. **Dispatch**: The backend generates a 4-digit code, saves only its peppered HMAC hash in `otp_challenges`, and dispatches the message via an active WhatsApp sender.
 3. **Receive**: Customer receives the WhatsApp notification on their phone.
-4. **Verify**: Customer types the 6 digits into the website form.
+4. **Verify**: Customer types the 4 digits into the website form.
 5. **Session Created**: The backend verifies the code atomically (`WHERE state = 'pending'`), marks it consumed, logs the user in via Laravel Sanctum or standard session, and redirects to the dashboard.
 
 ---
@@ -143,7 +144,6 @@ wa-gateway/
     ├── Providers/
     │   └── WhatsAppOtpServiceProvider.php             # Service container bindings
     └── Services/
-        ├── WhatsAppGatewayClient.php                  # Gateway HTTP API client
         └── WhatsAppOtp/                               # Core OTP logic, rate limiter, HMAC
             ├── OpenWaSessionClient.php
             ├── OtpException.php
@@ -153,7 +153,6 @@ wa-gateway/
             ├── TenantResolver.php
             └── Transport/                             # OpenWA, Mock, and Pooled transports
     ├── config/
-    │   ├── whatsapp_gateway.php                           # Gateway connection & API key settings
     │   └── whatsapp_otp.php                               # OTP length, cooldown, and pool rules
     ├── database/migrations/
     │   ├── 0001_wa_users.php                              # Adds phone_e164 to users table
@@ -186,16 +185,12 @@ curl http://127.0.0.1:18091/api/health/ready
 # Output: {"status":"ok", ...}
 ```
 
-### Step 2: Copy Add-on Files to Your Laravel Application
-Copy the contents of `whatsapp-addon/` into your existing Laravel project root:
-```bash
-# Linux / macOS
-cp -r whatsapp-addon/* /path/to/your-laravel-project/
+### Step 2: Integrate Without Overwriting Host Files
+Review destination paths before copying. Copy the namespaced `app/Services/WhatsAppOtp` directory, the `WhatsApp*` controllers/models/provider, `config/whatsapp_otp.php`, and `routes/whatsapp.php` only when their destination files do not already exist. Review differences manually on upgrades. The generic model/controller aliases are for legacy compatibility and are not required by the add-on.
 
-# Windows PowerShell
-Copy-Item -Path "whatsapp-addon/*" -Destination "C:\path\to\your-laravel-project" -Recurse -Force
-```
-*Because every filename is unique, this merges safely into your directories without overwriting anything.*
+Do not replace `User.php`, `Controller.php`, `api.php`, or `web.php`. Copy the frontend into its own `whatsapp/` directory, keeping its internal directory structure. Do not recursively copy this entire package into an existing application with overwrite enabled.
+
+Host prerequisites: Sanctum stateful sessions, Spatie roles, and a compatible User model/schema with `uuid`, `is_active`, `last_login_at`, soft deletes, WhatsApp fields/casts, and the `login_id` / `onboarding_required` accessors. Phone-only accounts need nullable name, email, and password. The sample migration changes name/email nullability; inspect it against the existing schema and back up the database before migration. File isolation does not make schema changes universally safe.
 
 ### Step 3: Run Database Migrations
 ```bash
@@ -222,27 +217,33 @@ Add these lines to your Laravel `.env` file:
 ```env
 # WhatsApp Gateway Engine
 OPENWA_BASE_URL=http://127.0.0.1:18091
-OPENWA_DEFAULT_SESSION=otp-sender-1
+OPENWA_SESSION_ID=otp-sender-1
 OPENWA_API_KEY=
 
 # OTP Cryptography & Rate Limits
 WA_OTP_HMAC_SECRET=generate-a-random-32-char-secret-string-here
 WA_OTP_TRANSPORT=openwa
-WA_OTP_RATE_LIMIT_PER_MINUTE=5
-WA_OTP_COOLDOWN_SECONDS=60
-WA_OTP_EXPIRATION_MINUTES=5
+WA_OTP_SEND_PER_PHONE=5
+WA_OTP_SEND_WINDOW_SECONDS=900
+WA_OTP_RESEND_COOLDOWN_SECONDS=30
+WA_OTP_TTL_SECONDS=300
+WA_OTP_MAX_ATTEMPTS=5
 ```
 
 ### Step 6: Customer Login Form (Frontend)
 Import and place the customer login form into your authentication page:
 ```tsx
-import WhatsAppOtpForm from './components/WhatsAppOtpForm';
+import WhatsAppOtpForm from './whatsapp/components/WhatsAppOtpForm';
+import { WhatsAppAuthProvider } from './whatsapp/contexts/AuthContext';
 
-export default function LoginPage() {
+// Render inside the host BrowserRouter. Refresh the host session after login.
+export default function LoginPage({ refreshSession }: { refreshSession: () => Promise<void> }) {
     return (
         <div className="login-container">
             <h2>Sign In with WhatsApp</h2>
-            <WhatsAppOtpForm />
+            <WhatsAppAuthProvider checkAuth={refreshSession}>
+                <WhatsAppOtpForm />
+            </WhatsAppAuthProvider>
         </div>
     );
 }
@@ -287,7 +288,7 @@ ssh root@84.247.148.115
 - **Authentication:** SSH Key (auto-login configured).
 
 ### Project Paths on VPS:
-- `/www/docker/wa-login-web`: The Laravel 12 API + React 19 testbed application (Port `18090`).
+- `/www/docker/wa-login-web`: The Laravel 13 API + React 19 testbed application (Port `18090`).
 - `/www/docker/wa-gateway`: The OpenWA Gateway Engine (Port `18091`) and documentation.
 
 ### Quick Operations Cheat Sheet on VPS:
@@ -313,3 +314,13 @@ docker exec -it wa-login-web-postgres-1 psql -U wa_login -d wa_login
 
 ---
 *Maintained for clean, non-intrusive enterprise Laravel integration.*
+
+### Integration boundaries
+
+Register `routes/whatsapp.php` once under `/api` with the API middleware; the provider currently registers services, not routes. Enable Sanctum stateful API middleware and the Spatie `role` alias in the host. Public member endpoints are `/api/v1/auth/whatsapp/{request-otp,verify-otp,resend-otp}`. The frontend also expects the host CSRF/session, onboarding, and dashboard flows.
+
+Sender pools and verified member lists are scoped to the authenticated admin's tenant. The embedded gateway console manages the whole engine and must only be available to trusted engine operators; it is not a tenant-isolated console. Use separate engine deployments for independent customer operators.
+
+The nginx file is a template: replace `${OPENWA_DASHBOARD_API_KEY}` server-side, for example with `envsubst '${OPENWA_DASHBOARD_API_KEY}'`, preserving nginx's own variables. Use the Docker resolver only inside Docker and configure upstream names for your network. Never put this key into frontend environment variables.
+
+The Laravel verifier database stores only peppered HMAC hashes. The mock outbox holds plaintext only in local/testing. Gateway message-history retention is separate and must be configured operationally; do not claim that no other system stores message bodies. Production connectivity and real WhatsApp delivery require deployment validation.

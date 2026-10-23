@@ -1,9 +1,10 @@
 <?php
 
-namespace App\Http\Controllers\Api\Admin;
+namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Services\WhatsAppOtp\TenantResolver;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -15,7 +16,7 @@ class WhatsAppVerifiedMembersController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
-        $query = User::query()
+        $query = User::query()->where('tenant_key', app(TenantResolver::class)->forAdmin($request))
             ->whereNotNull('phone_verified_at')
             ->select([
                 'id',
@@ -78,7 +79,7 @@ class WhatsAppVerifiedMembersController extends Controller
 
     public function show(Request $request, int $id): JsonResponse
     {
-        $user = User::whereNotNull('phone_verified_at')
+        $user = User::where('tenant_key', app(TenantResolver::class)->forAdmin($request))->whereNotNull('phone_verified_at')
             ->select([
                 'id',
                 'uuid',

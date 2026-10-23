@@ -130,7 +130,7 @@ export default function VerifiedMembersPanel() {
                             )}
                         </div>
                         <p className="gw-subtitle">
-                            Customers who have successfully verified their WhatsApp phone number via 6-digit OTP.
+                            Customers who have successfully verified their WhatsApp phone number via 4-digit OTP.
                         </p>
                     </div>
 
