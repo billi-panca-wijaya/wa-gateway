@@ -123,51 +123,31 @@ flowchart TD
 
 ```text
 wa-gateway/
-├── docker-compose.yml              # Engine: Starts OpenWA v0.24.0 on port 18091
-├── README.md                       # Master English Documentation
-├── README.id.md                    # Master Indonesian Documentation
-│
-└── whatsapp-addon/                 # DROP-IN PACKAGE FOR YOUR LARAVEL APP
+├── docker-compose.yml
+├── README.md / README.id.md
+└── whatsapp-addon/
     ├── app/
     │   ├── Http/Controllers/
-    │   │   ├── WhatsAppOtpController.php                  # Public customer OTP endpoints
-    │   │   ├── Admin/
-    │   │   │   ├── WhatsAppGatewayController.php          # Gateway session control
-    │   │   │   ├── WhatsAppSenderPoolController.php       # Multi-sender CRUD & pairing
-    │   │   │   └── WhatsAppVerifiedMembersController.php  # Verified customer listing
-    │   │   └── BackOffice/
-    │   │       └── WhatsAppMemberWebhookController.php    # Optional member webhook receiver
-    ├── Models/
-    │   ├── WhatsAppOtpChallenge.php                   # OTP challenge model
-    │   ├── WhatsAppOtpDelivery.php                    # Delivery audit log model
-    │   └── WhatsAppSenderPool.php                     # Sender device pool model
-    ├── Providers/
-    │   └── WhatsAppOtpServiceProvider.php             # Service container bindings
-    └── Services/
-        └── WhatsAppOtp/                               # Core OTP logic, rate limiter, HMAC
-            ├── OpenWaSessionClient.php
-            ├── OtpException.php
-            ├── OtpService.php
-            ├── PhoneNumber.php
-            ├── SenderPoolService.php
-            ├── TenantResolver.php
-            └── Transport/                             # OpenWA, Mock, and Pooled transports
-    ├── config/
-    │   └── whatsapp_otp.php                               # OTP length, cooldown, and pool rules
+    │   │   ├── WhatsAppOtpController.php
+    │   │   ├── Admin/WhatsApp*Controller.php
+    │   │   └── BackOffice/WhatsAppMemberWebhookController.php
+    │   ├── Models/WhatsApp*.php
+    │   ├── Providers/WhatsAppOtpServiceProvider.php
+    │   └── Services/WhatsAppOtp/
+    ├── config/whatsapp_otp.php
     ├── database/migrations/
-    │   ├── 0001_wa_users.php                              # Adds phone_e164 to users table
-    │   ├── 0002_wa_otp.php                                # Creates otp_challenges & otp_deliveries
-    │   └── 0003_wa_senders.php                            # Creates sender_pool multi-device table
-    ├── routes/
-    │   └── whatsapp.php                                   # Isolated route definitions
+    │   ├── 0001_wa_users.php
+    │   ├── 0002_wa_otp.php
+    │   └── 0003_wa_senders.php
+    ├── routes/whatsapp.php
+    ├── nginx/gateway-reverse-proxy.conf
     └── frontend/
         ├── components/
-        │   ├── WhatsAppOtpForm.tsx                        # Customer login modal component
-        │   ├── WhatsAppSenderPoolPanel.tsx                # Admin device management panel
-        │   └── WhatsAppVerifiedMembersPanel.tsx           # Verified customer list table
-        ├── backoffice/                                    # 9-menu embedded micro-frontend console
-        └── examples/
-            └── AdminDashboardSidebarExample.tsx           # Full sidebar integration example
+        ├── contexts/AuthContext.tsx
+        ├── hooks/useReveal.ts
+        ├── lib/axios.ts
+        ├── backoffice/
+        └── examples/AdminDashboardSidebarExample.tsx
 ```
 
 ---

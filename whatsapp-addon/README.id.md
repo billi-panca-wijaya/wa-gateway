@@ -123,51 +123,31 @@ flowchart TD
 
 ```text
 wa-gateway/
-├── docker-compose.yml              # Engine: Menjalankan OpenWA v0.24.0 di port 18091
-├── README.md                       # Dokumentasi Utama Bahasa Inggris
-├── README.id.md                    # Dokumentasi Utama Bahasa Indonesia
-│
-└── whatsapp-addon/                 # FOLDER PAKET ADD-ON (SIAP COPY KE LARAVEL ANDA)
+├── docker-compose.yml
+├── README.md / README.id.md
+└── whatsapp-addon/
     ├── app/
     │   ├── Http/Controllers/
-    │   │   ├── WhatsAppOtpController.php                  # Controller endpoint publik OTP
-    │   │   ├── Admin/
-    │   │   │   ├── WhatsAppGatewayController.php          # Kontrol sesi gateway
-    │   │   │   ├── WhatsAppSenderPoolController.php       # Manajemen rotasi & pairing nomor
-    │   │   │   └── WhatsAppVerifiedMembersController.php  # Daftar member terverifikasi
-    │   │   └── BackOffice/
-    │   │       └── WhatsAppMemberWebhookController.php    # Penerima webhook internal
-    │   ├── Models/
-    │   │   ├── WhatsAppOtpChallenge.php                   # Model tantangan OTP
-    │   │   ├── WhatsAppOtpDelivery.php                    # Model riwayat pengiriman
-    │   │   └── WhatsAppSenderPool.php                     # Model pool nomor pengirim
-    │   ├── Providers/
-    │   └── WhatsAppOtpServiceProvider.php             # Registrasi dependency injection
-    └── Services/
-        └── WhatsAppOtp/                               # Logika bisnis OTP, HMAC, dan pool
-            ├── OpenWaSessionClient.php
-            ├── OtpException.php
-            ├── OtpService.php
-            ├── PhoneNumber.php
-            ├── SenderPoolService.php
-            ├── TenantResolver.php
-            └── Transport/                             # Driver OpenWa, Mock, dan Pooled
-    ├── config/
-    │   └── whatsapp_otp.php                               # Aturan expired, cooldown, dan pool
+    │   │   ├── WhatsAppOtpController.php
+    │   │   ├── Admin/WhatsApp*Controller.php
+    │   │   └── BackOffice/WhatsAppMemberWebhookController.php
+    │   ├── Models/WhatsApp*.php
+    │   ├── Providers/WhatsAppOtpServiceProvider.php
+    │   └── Services/WhatsAppOtp/
+    ├── config/whatsapp_otp.php
     ├── database/migrations/
-    │   ├── 0001_wa_users.php                              # Tambah phone_e164 ke tabel users
-    │   ├── 0002_wa_otp.php                                # Buat tabel otp_challenges & deliveries
-    │   └── 0003_wa_senders.php                            # Buat tabel sender_pool
-    ├── routes/
-    │   └── whatsapp.php                                   # File rute khusus WhatsApp
+    │   ├── 0001_wa_users.php
+    │   ├── 0002_wa_otp.php
+    │   └── 0003_wa_senders.php
+    ├── routes/whatsapp.php
+    ├── nginx/gateway-reverse-proxy.conf
     └── frontend/
         ├── components/
-        │   ├── WhatsAppOtpForm.tsx                        # Komponen modal form login pelanggan
-        │   ├── WhatsAppSenderPoolPanel.tsx                # Panel admin kelola nomor pengirim
-        │   └── WhatsAppVerifiedMembersPanel.tsx           # Tabel daftar member terverifikasi
-        ├── backoffice/                                    # 9 Menu embedded konsol gateway
-        └── examples/
-            └── AdminDashboardSidebarExample.tsx           # Contoh integrasi sidebar dashboard
+        ├── contexts/AuthContext.tsx
+        ├── hooks/useReveal.ts
+        ├── lib/axios.ts
+        ├── backoffice/
+        └── examples/AdminDashboardSidebarExample.tsx
 ```
 
 ---
