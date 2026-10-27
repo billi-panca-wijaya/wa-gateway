@@ -20,21 +20,21 @@ class OtpException extends RuntimeException
     public static function make(string $code, int $status, array $extra = [], ?int $retryAfter = null): self
     {
         $messages = [
-            'PHONE_INVALID' => 'Nomor WhatsApp tidak valid.',
-            'OTP_INVALID' => 'Kode OTP salah atau tidak berlaku.',
-            'OTP_EXPIRED' => 'Kode OTP sudah kedaluwarsa. Minta kode baru.',
-            'OTP_ATTEMPTS_EXCEEDED' => 'Terlalu banyak percobaan. Minta kode baru.',
-            'CHALLENGE_SUPERSEDED' => 'Kode ini sudah diganti. Gunakan kode terbaru yang dikirim.',
-            'CHALLENGE_NOT_RESENDABLE' => 'Permintaan kode tidak dapat dikirim ulang. Mulai dari awal.',
-            'RATE_LIMITED' => 'Terlalu banyak permintaan. Coba lagi nanti.',
-            'RESEND_COOLDOWN' => 'Tunggu sebentar sebelum meminta kode baru.',
-            'REQUEST_IN_PROGRESS' => 'Permintaan sebelumnya masih diproses.',
-            'IDEMPOTENCY_KEY_REUSED' => 'Idempotency key sudah dipakai untuk permintaan lain.',
-            'TRANSPORT_UNAVAILABLE' => 'Layanan WhatsApp sedang tidak tersedia. Coba lagi beberapa saat.',
-            'ACCOUNT_DISABLED' => 'Akun tidak dapat digunakan. Hubungi dukungan.',
+            'PHONE_INVALID' => 'Enter a valid WhatsApp number.',
+            'OTP_INVALID' => 'Incorrect or invalid code.',
+            'OTP_EXPIRED' => 'Code expired. Request a new code.',
+            'OTP_ATTEMPTS_EXCEEDED' => 'Too many attempts. Request a new code.',
+            'CHALLENGE_SUPERSEDED' => 'This code was replaced. Use the latest code.',
+            'CHALLENGE_NOT_RESENDABLE' => 'This request cannot be resent. Start again.',
+            'RATE_LIMITED' => 'Too many requests. Try again later.',
+            'RESEND_COOLDOWN' => 'Please wait before requesting another code.',
+            'REQUEST_IN_PROGRESS' => 'Your previous request is still processing.',
+            'IDEMPOTENCY_KEY_REUSED' => 'This request key was used for another request.',
+            'TRANSPORT_UNAVAILABLE' => 'WhatsApp delivery is temporarily unavailable. Please try again.',
+            'ACCOUNT_DISABLED' => 'Your account is inactive. Contact support.',
         ];
 
-        return new self($code, $messages[$code] ?? 'Permintaan gagal.', $status, $extra, $retryAfter);
+        return new self($code, $messages[$code] ?? 'Request failed.', $status, $extra, $retryAfter);
     }
 
     /**

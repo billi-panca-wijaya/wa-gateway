@@ -2,11 +2,13 @@
 
 namespace App\Services\WhatsAppOtp;
 
+use App\Jobs\WhatsAppSendOtp;
 use App\Models\User;
 use App\Models\WhatsAppOtpChallenge as OtpChallenge;
 use App\Models\WhatsAppOtpDelivery as OtpDelivery;
 use App\Services\WhatsAppOtp\Transport\DeliveryResult;
 use App\Services\WhatsAppOtp\Transport\OtpTransport;
+use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -130,110 +132,185 @@ class OtpService
 
     private function issue(string $tenant, string $phone, ?string $idempotencyKey, string $ip, ?string $resendOf): array
     {
+        $this->secret();
+        $async = (bool) config('whatsapp_otp.queue.enabled', true);
+        $connection = (string) config('whatsapp_otp.queue.connection', 'redis');
+        if ($async && config("queue.connections.{$connection}.driver") !== 'redis') {
+            throw new OtpException('QUEUE_UNAVAILABLE', 'OTP delivery is temporarily unavailable. Please try again.', 503);
+        }
+        if (app()->environment('production') && (! $async || config('cache.stores.'.config('cache.default').'.driver') !== 'redis')) {
+            throw new OtpException('QUEUE_UNAVAILABLE', 'OTP delivery is temporarily unavailable. Please try again.', 503);
+        }
         $limits = config('whatsapp_otp.limits');
         $keys = [
             'wa-otp:send:phone:'.$tenant.':'.$phone => $limits['send_per_phone'],
             'wa-otp:send:ip:'.sha1($ip) => $limits['send_per_ip'],
             'wa-otp:send:global:'.$tenant => $limits['send_global'],
+            'wa-otp:send:system' => $limits['send_system'] ?? 2000,
         ];
-        foreach ($keys as $key => $max) {
-            if (RateLimiter::tooManyAttempts($key, $max)) {
-                $this->audit('request', $tenant, $phone, 'rate_limited');
-                throw OtpException::make('RATE_LIMITED', 429, [], RateLimiter::availableIn($key));
-            }
-        }
-
-        $lock = Cache::lock('wa-otp:issue:'.$tenant.':'.$phone, 30);
+        $lock = Cache::lock('wa-otp:issue:'.$tenant.':'.$phone, 120);
         if (! $lock->get()) {
             throw OtpException::make('REQUEST_IN_PROGRESS', 409);
         }
-
         try {
-            // Cooldown is server-side: a reload or a new request for the same phone cannot bypass it.
-            $active = OtpChallenge::where('tenant_key', $tenant)
-                ->where('phone_e164', $phone)
-                ->where('state', OtpChallenge::PENDING)
-                ->where('resend_available_at', '>', now())
-                ->orderByDesc('created_at')
-                ->first();
-            if ($active) {
-                throw OtpException::make('RESEND_COOLDOWN', 429, [], max(1, (int) ceil(now()->diffInSeconds($active->resend_available_at))));
+            if ($idempotencyKey !== null && ($replay = $this->replay($tenant, $phone, $idempotencyKey))) {
+                return $replay;
             }
-
-            $id = bin2hex(random_bytes(20));
-            $len = 4;
-            $maxNum = (10 ** $len) - 1;
-            $code = str_pad((string) random_int(0, $maxNum), $len, '0', STR_PAD_LEFT);
-            $now = now();
-
+            $admission = Cache::lock('wa-otp:admission', 10);
             try {
-                $challenge = DB::transaction(function () use ($tenant, $phone, $id, $code, $now, $idempotencyKey) {
-                    OtpChallenge::where('tenant_key', $tenant)
-                        ->where('phone_e164', $phone)
-                        ->where('state', OtpChallenge::PENDING)
-                        ->update([
-                            'state' => OtpChallenge::SUPERSEDED,
-                            'superseded_at' => $now,
-                            'superseded_by' => $id,
-                            'verifier' => null,
-                            'updated_at' => $now,
-                        ]);
-
-                    return OtpChallenge::create([
-                        'id' => $id,
-                        'tenant_key' => $tenant,
-                        'phone_e164' => $phone,
-                        'purpose' => self::PURPOSE_LOGIN,
-                        'verifier' => $this->verifier($id, $tenant, $phone, self::PURPOSE_LOGIN, $code),
-                        'state' => OtpChallenge::PENDING,
-                        'attempts' => 0,
-                        'max_attempts' => (int) config('whatsapp_otp.max_attempts', 5),
-                        'expires_at' => $now->copy()->addSeconds((int) config('whatsapp_otp.ttl_seconds', 300)),
-                        'resend_available_at' => $now->copy()->addSeconds((int) config('whatsapp_otp.resend_cooldown_seconds', 60)),
-                        'idempotency_key' => $idempotencyKey,
-                    ]);
-                });
-            } catch (UniqueConstraintViolationException) {
+                $admission->block(2);
+            } catch (LockTimeoutException) {
+                throw OtpException::make('REQUEST_IN_PROGRESS', 409);
+            }
+            try {
                 if ($idempotencyKey !== null && ($replay = $this->replay($tenant, $phone, $idempotencyKey))) {
                     return $replay;
                 }
-                throw OtpException::make('REQUEST_IN_PROGRESS', 409);
+                foreach ($keys as $key => $max) {
+                    if (RateLimiter::tooManyAttempts($key, $max)) {
+                        throw OtpException::make('RATE_LIMITED', 429, [], RateLimiter::availableIn($key));
+                    }
+                }
+                $active = OtpChallenge::where('tenant_key', $tenant)->where('phone_e164', $phone)
+                    ->whereIn('state', [OtpChallenge::PENDING, 'queued'])
+                    ->where('resend_available_at', '>', now())->latest('created_at')->first();
+                if ($active) {
+                    throw OtpException::make('RESEND_COOLDOWN', 429, [], max(1, (int) ceil(now()->diffInSeconds($active->resend_available_at))));
+                }
+                if ($async && OtpChallenge::where('state', 'queued')->where('expires_at', '>', now())->count() >= (int) config('whatsapp_otp.queue.max_pending', 1000)) {
+                    throw new OtpException('QUEUE_FULL', 'OTP delivery is busy. Please try again shortly.', 503, [], 30);
+                }
+                $id = bin2hex(random_bytes(20));
+                $challenge = DB::transaction(function () use ($tenant, $phone, $id, $idempotencyKey) {
+                    OtpChallenge::where('tenant_key', $tenant)->where('phone_e164', $phone)
+                        ->whereIn('state', [OtpChallenge::PENDING, 'queued'])
+                        ->update(['state' => OtpChallenge::SUPERSEDED, 'superseded_at' => now(), 'superseded_by' => $id, 'verifier' => null, 'updated_at' => now()]);
+                    $challenge = OtpChallenge::create([
+                        'id' => $id, 'tenant_key' => $tenant, 'phone_e164' => $phone, 'purpose' => self::PURPOSE_LOGIN,
+                        'verifier' => null, 'state' => 'queued', 'attempts' => 0,
+                        'max_attempts' => (int) config('whatsapp_otp.max_attempts', 5),
+                        'expires_at' => now()->addSeconds((int) config('whatsapp_otp.queue.max_wait_seconds', 30)),
+                        'resend_available_at' => now()->addSeconds(30), 'idempotency_key' => $idempotencyKey,
+                    ]);
+                    OtpDelivery::create(['challenge_id' => $id, 'transport' => $this->transport->name(), 'idempotency_key' => $id, 'status' => 'queued']);
+
+                    return $challenge;
+                });
+                foreach (array_keys($keys) as $key) {
+                    RateLimiter::hit($key, $limits['send_window_seconds']);
+                }
+            } finally {
+                $admission->release();
             }
-
-            $result = $this->transport->send($phone, $this->message($code, $challenge->expires_at->diffInMinutes($now, true)), $id, $tenant);
-            unset($code);
-
-            OtpDelivery::create([
-                'challenge_id' => $id,
-                'transport' => $this->transport->name(),
-                'sender_ref' => $this->transport->senderRef(),
-                'idempotency_key' => $id,
-                'provider_message_id' => $result->providerMessageId,
-                'status' => $result->status,
-                'error_code' => $result->errorCode,
-            ]);
-
-            if ($result->status === DeliveryResult::FAILED) {
-                // Nothing was sent: cancel and free the idempotency key so a retry can reuse it.
-                OtpChallenge::whereKey($id)->update([
-                    'state' => OtpChallenge::CANCELLED,
-                    'verifier' => null,
-                    'idempotency_key' => null,
-                    'updated_at' => now(),
-                ]);
-                $this->audit('request', $tenant, $phone, 'transport_failed', ['error_code' => $result->errorCode]);
-                throw OtpException::make('TRANSPORT_UNAVAILABLE', 503, ['delivery_status' => DeliveryResult::FAILED]);
-            }
-
-            foreach (array_keys($keys) as $key) {
-                RateLimiter::hit($key, $limits['send_window_seconds']);
-            }
-            $this->audit($resendOf ? 'resend' : 'request', $tenant, $phone, 'delivery_'.$result->status);
-
-            return $this->present($challenge, $result->status);
         } finally {
             $lock->release();
         }
+        if ($async) {
+            try {
+                WhatsAppSendOtp::dispatch($id)->onConnection($connection)
+                    ->onQueue((string) config('whatsapp_otp.queue.name', 'whatsapp-otp'));
+            } catch (\Throwable) {
+                $this->cancelDelivery($id, 'QUEUE_UNAVAILABLE');
+                throw new OtpException('QUEUE_UNAVAILABLE', 'OTP delivery is temporarily unavailable. Please try again.', 503);
+            }
+        } else {
+            $this->deliverQueued($id);
+        }
+        $challenge->refresh();
+        $status = (string) OtpDelivery::where('challenge_id', $id)->value('status');
+        if ($status === DeliveryResult::FAILED) {
+            throw OtpException::make('TRANSPORT_UNAVAILABLE', 503, ['delivery_status' => $status]);
+        }
+
+        return $this->present($challenge, $status);
+    }
+
+    public function deliverQueued(string $id): bool
+    {
+        $challenge = OtpChallenge::find($id);
+        if (! $challenge || $challenge->state !== 'queued') {
+            return true;
+        }
+        $lock = Cache::lock('wa-otp:issue:'.$challenge->tenant_key.':'.$challenge->phone_e164, 120);
+        if (! $lock->get()) {
+            return false;
+        }
+        try {
+            $challenge->refresh();
+            if ($challenge->state !== 'queued') {
+                return true;
+            }
+            if ($challenge->expires_at->lte(now())) {
+                $this->cancelDelivery($id, 'QUEUE_EXPIRED');
+
+                return true;
+            }
+            $code = str_pad((string) random_int(0, 9999), 4, '0', STR_PAD_LEFT);
+            $challenge->update([
+                'state' => OtpChallenge::PENDING,
+                'verifier' => $this->verifier($id, $challenge->tenant_key, $challenge->phone_e164, self::PURPOSE_LOGIN, $code),
+                'expires_at' => now()->addSeconds(300),
+            ]);
+            OtpDelivery::where('challenge_id', $id)->update(['status' => 'sending', 'updated_at' => now()]);
+            try {
+                $result = $this->transport->send($challenge->phone_e164, $this->message($code, 5), $id, $challenge->tenant_key);
+            } catch (\Throwable) {
+                // The provider may have accepted the message. Never retry ambiguous delivery.
+                $result = DeliveryResult::unknown('DELIVERY_OUTCOME_UNKNOWN');
+            } finally {
+                unset($code);
+            }
+            if ($result->errorCode === 'SENDER_BUSY') {
+                $challenge->update(['state' => 'queued', 'verifier' => null, 'expires_at' => $challenge->created_at->copy()->addSeconds((int) config('whatsapp_otp.queue.max_wait_seconds', 30))]);
+                OtpDelivery::where('challenge_id', $id)->update(['status' => 'queued', 'updated_at' => now()]);
+
+                return false;
+            }
+            OtpDelivery::where('challenge_id', $id)->update([
+                'sender_ref' => $this->transport->senderRef(), 'provider_message_id' => $result->providerMessageId,
+                'status' => $result->status, 'error_code' => $result->errorCode, 'updated_at' => now(),
+            ]);
+            if ($result->status === DeliveryResult::FAILED) {
+                $this->cancelDelivery($id, $result->errorCode ?? 'DELIVERY_FAILED');
+            }
+
+            return true;
+        } finally {
+            $lock->release();
+        }
+    }
+
+    private function cancelDelivery(string $id, string $reason): void
+    {
+        OtpChallenge::whereKey($id)->whereIn('state', ['queued', OtpChallenge::PENDING])
+            ->update(['state' => OtpChallenge::CANCELLED, 'verifier' => null, 'updated_at' => now()]);
+        OtpDelivery::where('challenge_id', $id)->update(['status' => DeliveryResult::FAILED, 'error_code' => $reason, 'updated_at' => now()]);
+    }
+
+    public function status(string $tenant, string $id): array
+    {
+        $challenge = OtpChallenge::where('tenant_key', $tenant)->findOrFail($id);
+        if ($challenge->state === 'queued' && $challenge->expires_at->lte(now())) {
+            $lock = Cache::lock('wa-otp:issue:'.$challenge->tenant_key.':'.$challenge->phone_e164, 120);
+            if ($lock->get()) {
+                try {
+                    $challenge->refresh();
+                    if ($challenge->state === 'queued' && $challenge->expires_at->lte(now())) {
+                        $this->cancelDelivery($id, 'QUEUE_EXPIRED');
+                        $challenge->refresh();
+                    }
+                } finally {
+                    $lock->release();
+                }
+            }
+        }
+        $delivery = OtpDelivery::where('challenge_id', $id)->first();
+        $status = $delivery?->status ?? 'unknown';
+        if ($status === 'sending' && $delivery->updated_at->lt(now()->subSeconds(65))) {
+            $status = 'unknown';
+        }
+
+        return $this->present($challenge, $status);
     }
 
     private function replay(string $tenant, string $phone, string $idempotencyKey): ?array
@@ -253,6 +330,8 @@ class OtpService
     private function assertVerifiable(OtpChallenge $challenge): void
     {
         switch ($challenge->state) {
+            case 'queued':
+                throw new OtpException('OTP_NOT_SENT', 'Your code is queued for sending. Please wait.', 409);
             case OtpChallenge::SUPERSEDED:
                 throw OtpException::make('CHALLENGE_SUPERSEDED', 409);
             case OtpChallenge::LOCKED:
@@ -361,7 +440,10 @@ class OtpService
         return [
             'challenge_id' => $challenge->id,
             'masked_phone' => PhoneNumber::mask($challenge->phone_e164),
-            'expires_at' => $challenge->expires_at->toIso8601String(),
+            'expires_at' => $challenge->state === 'queued' ? null : $challenge->expires_at->toIso8601String(),
+            'expires_in' => $challenge->state === 'queued' ? null : max(0, (int) ceil(now()->diffInSeconds($challenge->expires_at, false))),
+            'state' => $challenge->state,
+            'server_time' => now()->toIso8601String(),
             'resend_available_at' => $challenge->resend_available_at->toIso8601String(),
             'resend_after' => max(0, (int) ceil(now()->diffInSeconds($challenge->resend_available_at, false))),
             'delivery_status' => $deliveryStatus,

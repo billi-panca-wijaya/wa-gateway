@@ -1,3 +1,5 @@
+> **Queued login update:** Turnstile now runs after Request/Resend OTP is clicked. Laravel verifies it before enqueueing an ID-only Redis job. Configure the Turnstile keys, shared Redis cache, and a supervised `whatsapp-otp` worker before enabling live login. See [setup, API states, limits, and recovery](QUEUED_LOGIN.md). Member OTP is fixed at 4 digits, 300-second validity from worker generation, and a 30-second resend cooldown. Sender pairing remains separate.
+
 > Member website login uses exactly **4 numeric digits**, including leading zeros (for example `0123`). Sender pairing is a separate gateway flow; do not shorten its pairing code. `WA_OTP_CODE_LENGTH` is no longer used: the member OTP length is fixed in code. Rebuild frontend assets and refresh Laravel's config cache when deploying this change. Existing challenges with the previous length must expire before retrying.
 
 # 🚀 WhatsApp API Gateway & Drop-in Laravel Add-on
@@ -71,7 +73,7 @@ The system connects your customer, your existing Laravel backend, the gateway en
 │  - Stores SHA-256 HMAC hash in DB (otp_challenges)     │
 │  - Selects active device from SenderPool (Round-Robin) │
 └────────────────┬───────────────────────────────────────┘
-                 │ 2. POST /api/sessions/{session}/messages/send
+                 │ 2. POST /api/sessions/{session}/messages/send-text
                  ▼
 ┌────────────────────────────────────────────────────────┐
 │         OpenWA WhatsApp Gateway Container              │
@@ -93,9 +95,10 @@ Here is the straightforward, non-convoluted authentication process:
 
 ```mermaid
 flowchart TD
-    Start([📱 Customer Enters Phone Number]) --> Step1[Frontend submits phone to Laravel Backend]
-    Step1 --> Step2[Backend validates number & rate-limits]
-    Step2 --> Step3[Generate 4-digit OTP & Store HMAC hash in DB]
+    Start([📱 Customer Enters Phone Number]) --> Bot[Customer clicks Request OTP and completes Turnstile]
+    Bot --> Step1[Frontend submits phone and challenge token]
+    Step1 --> Step2[Backend verifies token, number and limits; queues challenge ID]
+    Step2 --> Step3[Worker generates 4-digit OTP and stores HMAC hash]
     Step3 --> Step4[Select active sender from SenderPool & dispatch via Gateway]
     Step4 --> Step5[Customer receives WhatsApp message with 4-digit code]
     Step5 --> Step6[Customer enters 4-digit code on website form]
@@ -112,7 +115,7 @@ flowchart TD
 
 ### Plain-Language Breakdown:
 1. **Request OTP**: Customer inputs their mobile number on the login modal.
-2. **Dispatch**: The backend generates a 4-digit code, saves only its peppered HMAC hash in `otp_challenges`, and dispatches the message via an active WhatsApp sender.
+2. **Challenge and queue**: After the button click, Turnstile verifies the request. Laravel enqueues the challenge ID; a worker generates a 4-digit code, saves its peppered HMAC hash, and sends through an available WhatsApp sender. The form displays queued/sending status until submission or failure.
 3. **Receive**: Customer receives the WhatsApp notification on their phone.
 4. **Verify**: Customer types the 4 digits into the website form.
 5. **Session Created**: The backend verifies the code atomically (`WHERE state = 'pending'`), marks it consumed, logs the user in via Laravel Sanctum or standard session, and redirects to the dashboard.
@@ -131,6 +134,7 @@ wa-gateway/
     │   │   ├── WhatsAppOtpController.php
     │   │   ├── Admin/WhatsApp*Controller.php
     │   │   └── BackOffice/WhatsAppMemberWebhookController.php
+    │   ├── Jobs/WhatsAppSendOtp.php
     │   ├── Models/WhatsApp*.php
     │   ├── Providers/WhatsAppOtpServiceProvider.php
     │   └── Services/WhatsAppOtp/
@@ -140,11 +144,16 @@ wa-gateway/
     │   ├── 0002_wa_otp.php
     │   └── 0003_wa_senders.php
     ├── routes/whatsapp.php
+    ├── routes/whatsapp_otp_delivery.php
+    ├── QUEUED_LOGIN.md
+    ├── deploy/whatsapp-otp-worker.conf
+    ├── tests/
     ├── nginx/gateway-reverse-proxy.conf
     └── frontend/
         ├── components/
         ├── contexts/AuthContext.tsx
         ├── hooks/useReveal.ts
+        ├── hooks/useWhatsAppChallenge.ts
         ├── lib/axios.ts
         ├── backoffice/
         └── examples/AdminDashboardSidebarExample.tsx
@@ -205,8 +214,7 @@ WA_OTP_HMAC_SECRET=generate-a-random-32-char-secret-string-here
 WA_OTP_TRANSPORT=openwa
 WA_OTP_SEND_PER_PHONE=5
 WA_OTP_SEND_WINDOW_SECONDS=900
-WA_OTP_RESEND_COOLDOWN_SECONDS=30
-WA_OTP_TTL_SECONDS=300
+# Member OTP TTL/cooldown are fixed at 300/30 seconds in code.
 WA_OTP_MAX_ATTEMPTS=5
 ```
 
@@ -297,7 +305,7 @@ docker exec -it wa-login-web-postgres-1 psql -U wa_login -d wa_login
 
 ### Integration boundaries
 
-Register `routes/whatsapp.php` once under `/api` with the API middleware; the provider currently registers services, not routes. Enable Sanctum stateful API middleware and the Spatie `role` alias in the host. Public member endpoints are `/api/v1/auth/whatsapp/{request-otp,verify-otp,resend-otp}`. The frontend also expects the host CSRF/session, onboarding, and dashboard flows.
+Register `routes/whatsapp.php` once under `/api` with the API middleware; the provider registers services and separately loads `routes/whatsapp_otp_delivery.php` for challenge configuration/status. Copy that file and `app/Jobs/WhatsAppSendOtp.php` on upgrades. Enable Sanctum stateful API middleware and the Spatie `role` alias in the host. Public member endpoints are `/api/v1/auth/whatsapp/{request-otp,verify-otp,resend-otp}`. The frontend also expects the host CSRF/session, onboarding, and dashboard flows.
 
 Sender pools and verified member lists are scoped to the authenticated admin's tenant. The embedded gateway console manages the whole engine and must only be available to trusted engine operators; it is not a tenant-isolated console. Use separate engine deployments for independent customer operators.
 

@@ -56,7 +56,6 @@ class PooledTransport implements OtpTransport
         $attempts = 0;
 
         foreach ($activeSenders as $sender) {
-            $attempts++;
             $this->lastUsedSender = $sender->session_id;
 
             $defaultSession = $this->defaultConfig['session_id'] ?? null;
@@ -74,6 +73,12 @@ class PooledTransport implements OtpTransport
 
             $transport = new OpenWaTransport($senderConfig);
             $result = $transport->send($phoneE164, $message, $idempotencyKey);
+            if ($result->errorCode === 'SENDER_BUSY') {
+                $lastResult ??= $result;
+
+                continue;
+            }
+            $attempts++;
             $lastResult = $result;
 
             if ($result->status !== DeliveryResult::FAILED) {
@@ -93,7 +98,9 @@ class PooledTransport implements OtpTransport
             }
         }
 
-        Log::error("PooledTransport: All available senders in pool failed. Total attempts: {$attempts}.");
+        if ($attempts > 0) {
+            Log::error("PooledTransport: All available senders in pool failed. Total attempts: {$attempts}.");
+        }
 
         return $lastResult ?? DeliveryResult::failed('ALL_POOL_SENDERS_FAILED');
     }

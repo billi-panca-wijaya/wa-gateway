@@ -5,7 +5,6 @@ namespace App\Providers;
 use App\Services\WhatsAppOtp\OpenWaSessionClient;
 use App\Services\WhatsAppOtp\SenderPoolService;
 use App\Services\WhatsAppOtp\Transport\MockTransport;
-use App\Services\WhatsAppOtp\Transport\OpenWaTransport;
 use App\Services\WhatsAppOtp\Transport\OtpTransport;
 use App\Services\WhatsAppOtp\Transport\PooledTransport;
 use Illuminate\Support\ServiceProvider;
@@ -13,6 +12,11 @@ use RuntimeException;
 
 class WhatsAppOtpServiceProvider extends ServiceProvider
 {
+    public function boot(): void
+    {
+        $this->loadRoutesFrom(base_path('routes/whatsapp_otp_delivery.php'));
+    }
+
     public function register(): void
     {
         $this->app->bind(OpenWaSessionClient::class, fn () => new OpenWaSessionClient((array) config('whatsapp_otp.openwa')));

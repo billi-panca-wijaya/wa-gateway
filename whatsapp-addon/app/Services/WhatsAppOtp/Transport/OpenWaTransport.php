@@ -3,6 +3,7 @@
 namespace App\Services\WhatsAppOtp\Transport;
 
 use Illuminate\Http\Client\ConnectionException;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 
 /**
@@ -25,6 +26,27 @@ class OpenWaTransport implements OtpTransport
     }
 
     public function send(string $phoneE164, #[\SensitiveParameter] string $message, string $idempotencyKey, ?string $tenantKey = null): DeliveryResult
+    {
+        if (! config('whatsapp_otp.sender_limits.enabled', true)) {
+            return $this->deliver($phoneE164, $message, $idempotencyKey, $tenantKey);
+        }
+        $key = 'wa-otp:sender:'.hash('sha256', ($this->config['base_url'] ?? '').'|'.($this->config['session_id'] ?? ''));
+        $lock = Cache::lock($key.':lock', 120);
+        if (! $lock->get()) {
+            return DeliveryResult::failed('SENDER_BUSY');
+        }
+        try {
+            if (! Cache::add($key.':interval', true, max(1, (int) config('whatsapp_otp.sender_limits.min_interval_seconds', 3)))) {
+                return DeliveryResult::failed('SENDER_BUSY');
+            }
+
+            return $this->deliver($phoneE164, $message, $idempotencyKey, $tenantKey);
+        } finally {
+            $lock->release();
+        }
+    }
+
+    private function deliver(string $phoneE164, #[\SensitiveParameter] string $message, string $idempotencyKey, ?string $tenantKey = null): DeliveryResult
     {
         $session = $this->config['session_id'] ?? null;
         if (empty($this->config['base_url']) || empty($this->config['api_key']) || empty($session)) {

@@ -5,7 +5,9 @@ namespace App\Http\Controllers;
 use App\Models\User;
 use App\Services\WhatsAppOtp\OtpException;
 use App\Services\WhatsAppOtp\OtpService;
+use App\Services\WhatsAppOtp\PhoneNumber;
 use App\Services\WhatsAppOtp\TenantResolver;
+use App\Services\WhatsAppOtp\WhatsAppBotChallenge;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -25,6 +27,7 @@ class WhatsAppOtpController extends Controller
             'idempotency_key' => ['sometimes', 'nullable', 'string', 'max:128'],
         ]);
 
+        $this->authorizeBot($request, 'otp_request', PhoneNumber::normalize($data['phone'], (string) config('whatsapp_otp.default_region', 'ID')));
         $payload = $this->otp->request(
             $this->tenants->resolve($request),
             $data['phone'],
@@ -32,7 +35,10 @@ class WhatsAppOtpController extends Controller
             (string) $request->ip(),
         );
 
-        return response()->json($payload);
+        $ids = $request->session()->get('whatsapp_otp_challenges', []);
+        $request->session()->put('whatsapp_otp_challenges', array_slice(array_unique([...$ids, $payload['challenge_id']]), -10));
+
+        return response()->json($payload, $payload['delivery_status'] === 'queued' ? 202 : 200);
     }
 
     public function resendOtp(Request $request): JsonResponse
@@ -42,6 +48,8 @@ class WhatsAppOtpController extends Controller
             'idempotency_key' => ['sometimes', 'nullable', 'string', 'max:128'],
         ]);
 
+        $this->authorizeBot($request, 'otp_resend', $data['challenge_id']);
+        abort_unless(in_array($data['challenge_id'], $request->session()->get('whatsapp_otp_challenges', []), true), 404);
         $payload = $this->otp->resend(
             $this->tenants->resolve($request),
             $data['challenge_id'],
@@ -49,7 +57,35 @@ class WhatsAppOtpController extends Controller
             (string) $request->ip(),
         );
 
-        return response()->json($payload);
+        $ids = $request->session()->get('whatsapp_otp_challenges', []);
+        $request->session()->put('whatsapp_otp_challenges', array_slice(array_unique([...$ids, $payload['challenge_id']]), -10));
+
+        return response()->json($payload, $payload['delivery_status'] === 'queued' ? 202 : 200);
+    }
+
+    private function authorizeBot(Request $request, string $action, string $identity): void
+    {
+        if (! $request->hasSession()) {
+            throw new OtpException('STATEFUL_ORIGIN_REQUIRED', 'Request must originate from a registered web application.', 400);
+        }
+        app(WhatsAppBotChallenge::class)->verify($request, $action, $identity);
+    }
+
+    public function challengeConfig(): JsonResponse
+    {
+        $enabled = (bool) config('whatsapp_otp.turnstile.enabled', true);
+        if (! $enabled && ! app()->environment(['local', 'testing'])) {
+            throw new OtpException('BOT_CHECK_UNAVAILABLE', 'Verification is temporarily unavailable. Please try again.', 503);
+        }
+
+        return response()->json(['enabled' => $enabled, 'site_key' => $enabled ? config('whatsapp_otp.turnstile.site_key') : null])->header('Cache-Control', 'no-store');
+    }
+
+    public function deliveryStatus(Request $request, string $id): JsonResponse
+    {
+        abort_unless($request->hasSession() && in_array($id, $request->session()->get('whatsapp_otp_challenges', []), true), 404);
+
+        return response()->json($this->otp->status($this->tenants->resolve($request), $id))->header('Cache-Control', 'no-store');
     }
 
     public function verifyOtp(Request $request): JsonResponse

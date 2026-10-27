@@ -1,3 +1,5 @@
+> **Queued login update:** Turnstile now runs after Request/Resend OTP is clicked. Laravel verifies it before enqueueing an ID-only Redis job. Configure the Turnstile keys, shared Redis cache, and a supervised `whatsapp-otp` worker before enabling live login. See [setup, API states, limits, and recovery](whatsapp-addon/QUEUED_LOGIN.md). Member OTP is fixed at 4 digits, 300-second validity from worker generation, and a 30-second resend cooldown. Sender pairing remains separate.
+
 > Login member website menggunakan tepat **4 digit angka**, termasuk nol di depan (contoh `0123`). Pairing nomor pengirim adalah alur gateway terpisah; jangan memendekkan kode pairing. `WA_OTP_CODE_LENGTH` tidak digunakan lagi karena panjang OTP member ditetapkan dalam kode. Saat deploy, build ulang frontend dan perbarui cache konfigurasi Laravel. Challenge lama harus kedaluwarsa sebelum mencoba lagi.
 
 # 🚀 WhatsApp API Gateway & Paket Add-on Siap Pakai untuk Laravel
@@ -131,6 +133,7 @@ wa-gateway/
     │   │   ├── WhatsAppOtpController.php
     │   │   ├── Admin/WhatsApp*Controller.php
     │   │   └── BackOffice/WhatsAppMemberWebhookController.php
+    │   ├── Jobs/WhatsAppSendOtp.php
     │   ├── Models/WhatsApp*.php
     │   ├── Providers/WhatsAppOtpServiceProvider.php
     │   └── Services/WhatsAppOtp/
@@ -140,11 +143,16 @@ wa-gateway/
     │   ├── 0002_wa_otp.php
     │   └── 0003_wa_senders.php
     ├── routes/whatsapp.php
+    ├── routes/whatsapp_otp_delivery.php
+    ├── QUEUED_LOGIN.md
+    ├── deploy/whatsapp-otp-worker.conf
+    ├── tests/
     ├── nginx/gateway-reverse-proxy.conf
     └── frontend/
         ├── components/
         ├── contexts/AuthContext.tsx
         ├── hooks/useReveal.ts
+        ├── hooks/useWhatsAppChallenge.ts
         ├── lib/axios.ts
         ├── backoffice/
         └── examples/AdminDashboardSidebarExample.tsx
@@ -205,8 +213,7 @@ WA_OTP_HMAC_SECRET=kunci-rahasia-acak-minimal-32-karakter-di-sini
 WA_OTP_TRANSPORT=openwa
 WA_OTP_SEND_PER_PHONE=5
 WA_OTP_SEND_WINDOW_SECONDS=900
-WA_OTP_RESEND_COOLDOWN_SECONDS=30
-WA_OTP_TTL_SECONDS=300
+# Member OTP TTL/cooldown are fixed at 300/30 seconds in code.
 WA_OTP_MAX_ATTEMPTS=5
 ```
 
@@ -300,7 +307,7 @@ docker exec -it wa-login-web-postgres-1 psql -U wa_login -d wa_login
 
 ### Batas integrasi
 
-Daftarkan `routes/whatsapp.php` satu kali di bawah `/api` dengan middleware API; provider saat ini mendaftarkan service, bukan route. Aktifkan middleware API stateful Sanctum dan alias `role` Spatie pada host. Endpoint member: `/api/v1/auth/whatsapp/{request-otp,verify-otp,resend-otp}`. Frontend juga memerlukan alur CSRF/session, onboarding, dan dashboard milik host.
+Daftarkan `routes/whatsapp.php` satu kali di bawah `/api` dengan middleware API; provider mendaftarkan service serta memuat `routes/whatsapp_otp_delivery.php` untuk konfigurasi challenge dan status pengiriman. Saat upgrade, salin file tersebut dan `app/Jobs/WhatsAppSendOtp.php`. Aktifkan middleware API stateful Sanctum dan alias `role` Spatie pada host. Endpoint member: `/api/v1/auth/whatsapp/{request-otp,verify-otp,resend-otp}`. Frontend juga memerlukan alur CSRF/session, onboarding, dan dashboard milik host.
 
 Sender pool dan daftar member dibatasi ke tenant admin yang login. Konsol gateway tertanam mengelola seluruh engine dan hanya boleh diberikan kepada operator engine tepercaya; konsol tersebut belum terisolasi per tenant. Gunakan engine terpisah bagi operator pelanggan yang independen.
 
