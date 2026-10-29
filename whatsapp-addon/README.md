@@ -216,7 +216,34 @@ WA_OTP_SEND_PER_PHONE=5
 WA_OTP_SEND_WINDOW_SECONDS=900
 # Member OTP TTL/cooldown are fixed at 300/30 seconds in code.
 WA_OTP_MAX_ATTEMPTS=5
+
+# Cloudflare Turnstile Bot Protection (Required in Production)
+# Get from Cloudflare Dashboard -> Turnstile -> Add Site (Mode: Managed)
+WA_OTP_TURNSTILE_ENABLED=true
+WA_OTP_TURNSTILE_SITE_KEY=<your-turnstile-site-key>
+WA_OTP_TURNSTILE_SECRET_KEY=<your-turnstile-secret-key>
+WA_OTP_TURNSTILE_HOSTNAMES=your-domain.com,login.your-domain.com,localhost,127.0.0.1
+
+# Asynchronous Redis Queue for OTP
+WA_OTP_QUEUE_ENABLED=true
+WA_OTP_QUEUE_CONNECTION=redis
+WA_OTP_QUEUE_NAME=whatsapp-otp
+REDIS_QUEUE_RETRY_AFTER=90
 ```
+
+#### Cloudflare Turnstile Setup Guide (Step-by-Step):
+1. **Open Cloudflare Dashboard**: Log in to [Cloudflare Dashboard](https://dash.cloudflare.com) and navigate to **Turnstile** in the left sidebar.
+2. **Create or Manage Widget**: Click **Add site / Add widget** (Widget Mode: **Managed**).
+3. **Configure Domains**: Under **Domains**, add your website domains (e.g. `your-domain.com`), plus `localhost` and `127.0.0.1` for local development testing.
+4. **Retrieve Keys**:
+   - **Site Key**: Copy the public key for frontend/browser (format: `0x4AAAAAA...`).
+   - **Secret Key**: Copy the server-side secret key (format: `0x4AAAAAA...`). *If the Secret Key is masked or lost, click **Rotate Secret Key** in the widget Settings tab to issue a new secret key.*
+5. **Set in Server `.env`**: Add both keys to your host Laravel `.env` or Docker environment file.
+6. **Refresh Configuration Cache & Restart Worker**:
+   ```bash
+   php artisan config:clear && php artisan config:cache
+   php artisan queue:restart
+   ```
 
 ### Step 6: Customer Login Form (Frontend)
 Import and place the customer login form into your authentication page:

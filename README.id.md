@@ -215,7 +215,34 @@ WA_OTP_SEND_PER_PHONE=5
 WA_OTP_SEND_WINDOW_SECONDS=900
 # Member OTP TTL/cooldown are fixed at 300/30 seconds in code.
 WA_OTP_MAX_ATTEMPTS=5
+
+# Proteksi Bot Cloudflare Turnstile (Wajib di Production)
+# Dapatkan dari Cloudflare Dashboard -> Turnstile -> Add Site (Mode: Managed)
+WA_OTP_TURNSTILE_ENABLED=true
+WA_OTP_TURNSTILE_SITE_KEY=<your-turnstile-site-key>
+WA_OTP_TURNSTILE_SECRET_KEY=<your-turnstile-secret-key>
+WA_OTP_TURNSTILE_HOSTNAMES=your-domain.com,login.your-domain.com,localhost,127.0.0.1
+
+# Asynchronous Redis Queue untuk OTP
+WA_OTP_QUEUE_ENABLED=true
+WA_OTP_QUEUE_CONNECTION=redis
+WA_OTP_QUEUE_NAME=whatsapp-otp
+REDIS_QUEUE_RETRY_AFTER=90
 ```
+
+#### Panduan Setup Cloudflare Turnstile (Langkah demi Langkah):
+1. **Buka Cloudflare Dashboard**: Masuk ke [Cloudflare Dashboard](https://dash.cloudflare.com) lalu buka menu **Turnstile** di navigasi sebelah kiri.
+2. **Buat atau Kelola Widget**: Klik **Add site / Add widget** (Pilih Mode: **Managed**).
+3. **Konfigurasi Domain**: Di bagian **Domains**, masukkan domain website Anda (contoh: `your-domain.com`), serta `localhost` dan `127.0.0.1` jika diperlukan untuk pengujian lokal.
+4. **Salin Kunci**:
+   - **Site Key**: Salin kunci publik untuk browser/frontend (format: `0x4AAAAAA...`).
+   - **Secret Key**: Salin kunci rahasia untuk backend (format: `0x4AAAAAA...`). *Jika Secret Key tidak tersimpan saat pembuatan, klik tombol **Rotate Secret Key** di tab Settings widget untuk membuat kunci baru.*
+5. **Pasang di `.env` Server**: Tempelkan kedua kunci ke file environment deployment (`.env` Laravel host atau environment Docker Compose).
+6. **Segarkan Cache & Restart Worker**:
+   ```bash
+   php artisan config:clear && php artisan config:cache
+   php artisan queue:restart
+   ```
 
 ### Langkah 6: Pasang Form Login Pelanggan di Halaman Depan
 Gunakan komponen React `<WhatsAppAuthProvider checkAuth={refreshSession}>
