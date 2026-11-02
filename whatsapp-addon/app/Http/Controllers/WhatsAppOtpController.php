@@ -112,22 +112,24 @@ class WhatsAppOtpController extends Controller
 
         $user = $result['user'];
 
+        $onboarding = (bool) ($user->onboarding_required ?? false);
+
         return response()->json([
             'authenticated' => true,
             'user' => self::presentUser($user),
-            'onboarding_required' => $user->onboarding_required,
-            'next' => $user->onboarding_required ? '/onboarding' : '/dashboard',
+            'onboarding_required' => $onboarding,
+            'next' => $onboarding ? '/onboarding' : '/dashboard',
         ]);
     }
 
     public static function presentUser(User $user): array
     {
         return [
-            'id' => $user->uuid,
-            'login_id' => $user->login_id,
+            'id' => $user->uuid ?? $user->id,
+            'login_id' => $user->login_id ?? $user->phone_e164 ?? $user->email,
             'phone_e164' => $user->phone_e164,
             'name' => $user->name,
-            'onboarding_required' => $user->onboarding_required,
+            'onboarding_required' => (bool) ($user->onboarding_required ?? false),
         ];
     }
 

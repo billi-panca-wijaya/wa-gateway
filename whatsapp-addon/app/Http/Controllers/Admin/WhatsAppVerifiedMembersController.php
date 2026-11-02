@@ -16,20 +16,16 @@ class WhatsAppVerifiedMembersController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
+        $cols = ['id', 'name', 'email', 'tenant_key', 'phone_e164', 'phone_verified_at', 'created_at'];
+        foreach (['uuid', 'last_login_at', 'is_active'] as $optionalCol) {
+            if (\Illuminate\Support\Facades\Schema::hasColumn('users', $optionalCol)) {
+                $cols[] = $optionalCol;
+            }
+        }
+
         $query = User::query()->where('tenant_key', app(TenantResolver::class)->forAdmin($request))
             ->whereNotNull('phone_verified_at')
-            ->select([
-                'id',
-                'uuid',
-                'name',
-                'email',
-                'tenant_key',
-                'phone_e164',
-                'phone_verified_at',
-                'last_login_at',
-                'is_active',
-                'created_at',
-            ]);
+            ->select($cols);
 
         // Filter by tenant
         if ($tenant = $request->query('tenant_key')) {
@@ -79,20 +75,15 @@ class WhatsAppVerifiedMembersController extends Controller
 
     public function show(Request $request, int $id): JsonResponse
     {
+        $cols = ['id', 'name', 'email', 'tenant_key', 'phone_e164', 'phone_verified_at', 'created_at', 'updated_at'];
+        foreach (['uuid', 'last_login_at', 'is_active'] as $optionalCol) {
+            if (\Illuminate\Support\Facades\Schema::hasColumn('users', $optionalCol)) {
+                $cols[] = $optionalCol;
+            }
+        }
+
         $user = User::where('tenant_key', app(TenantResolver::class)->forAdmin($request))->whereNotNull('phone_verified_at')
-            ->select([
-                'id',
-                'uuid',
-                'name',
-                'email',
-                'tenant_key',
-                'phone_e164',
-                'phone_verified_at',
-                'last_login_at',
-                'is_active',
-                'created_at',
-                'updated_at',
-            ])
+            ->select($cols)
             ->findOrFail($id);
 
         return response()->json([

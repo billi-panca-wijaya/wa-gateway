@@ -361,7 +361,10 @@ class OtpService
      */
     private function resolveUser(string $tenant, string $phone): array
     {
-        $find = fn () => User::withTrashed()->where('tenant_key', $tenant)->where('phone_e164', $phone)->first();
+        $find = function () use ($tenant, $phone) {
+            $query = method_exists(User::class, 'withTrashed') ? User::withTrashed() : User::query();
+            return $query->where('tenant_key', $tenant)->where('phone_e164', $phone)->first();
+        };
         $created = false;
         $user = $find();
 
@@ -375,21 +378,23 @@ class OtpService
                     'is_active' => true,
                 ]);
                 $created = true;
-                if (Role::where('name', 'user')->where('guard_name', 'web')->exists()) {
-                    $user->assignRole('user');
+                if (class_exists(Role::class) && method_exists($user, 'assignRole')) {
+                    if (Role::where('name', 'user')->where('guard_name', 'web')->exists()) {
+                        $user->assignRole('user');
+                    }
                 }
             } catch (UniqueConstraintViolationException) {
                 $user = $find();
             }
         }
 
-        if ($user->trashed()) {
+        if (method_exists($user, 'trashed') && $user->trashed()) {
             $user->restore();
             $user->is_active = true;
             $created = true;
         }
 
-        if (! $user->is_active) {
+        if (isset($user->is_active) && ! $user->is_active) {
             $this->audit('verify', $tenant, $phone, 'account_disabled');
             throw OtpException::make('ACCOUNT_DISABLED', 403);
         }
