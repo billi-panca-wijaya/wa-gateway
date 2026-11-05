@@ -11,15 +11,19 @@ A production-ready, self-hosted **WhatsApp API Gateway** and **non-intrusive dro
 ## 📑 Table of Contents
 1. [What is This & Why Use It? (Purpose)](#-1-what-is-this--why-use-it-purpose)
 2. [Zero-Overwrite Guarantee](#-2-zero-overwrite-guarantee)
-3. [System Workflow & Architecture](#-3-system-workflow--architecture)
-4. [Customer Login Flowchart](#-4-customer-login-flowchart)
+3. [System Architecture & Database Topology](#-3-system-architecture--database-topology)
+   - [WhatsApp Gateway Engine (OpenWA)](#a-whatsapp-gateway-engine-openwa-docker)
+   - [Backend Database Roles (PostgreSQL, MySQL, MongoDB, Redis)](#b-backend-database-roles-postgresql-mysql-mongodb-redis)
+4. [Customer Login Flowchart & Lifecycle](#-4-customer-login-flowchart--lifecycle)
 5. [What's Inside & Directory Structure](#-5-whats-inside--directory-structure)
 6. [Step-by-Step Implementation Guide (How to Use)](#-6-step-by-step-implementation-guide-how-to-use)
+   - [Option A: SQL Setup (PostgreSQL / MySQL)](#step-3a-sql-setup-postgresql--mysql)
+   - [Option B: NoSQL Setup (MongoDB)](#step-3b-nosql-setup-mongodb)
 7. [Cloudflare Turnstile Bot Defense Setup](#-7-cloudflare-turnstile-bot-defense-setup)
 8. [Asynchronous Redis Queue & Supervisor](#-8-asynchronous-redis-queue--supervisor)
 9. [The 9-Menu Back-Office Admin Portal](#-9-the-9-menu-back-office-admin-portal)
 10. [Pairing WhatsApp Sender Numbers](#-10-pairing-whatsapp-sender-numbers)
-11. [VPS Deployment & Operations Guide](#-11-vps-deployment--operations-guide)
+11. [Production Deployment & Operations Guide](#-11-production-deployment--operations-guide)
 12. [Integration Boundaries & Security](#-12-integration-boundaries--security)
 
 ---
@@ -29,7 +33,7 @@ A production-ready, self-hosted **WhatsApp API Gateway** and **non-intrusive dro
 ### The Problem
 - **Expensive Cloud APIs**: Services like Twilio or official Meta WhatsApp Business API charge steep monthly fees and per-message costs.
 - **Intrusive Packages**: Most auth packages require scaffolding a brand new Laravel app from scratch or overwriting your existing controllers, user models, and routes.
-- **Single Point of Failure**: Using a single WhatsApp number risks business disruption if that number gets temporarily rate-limited or disconnected.
+- **Single Point of Failure**: Relying on a single WhatsApp number risks business disruption if that number gets temporarily rate-limited or disconnected.
 - **Bot Abuse & OTP Pumping**: Public login endpoints are frequently targeted by spam bots, resulting in queue congestion and unnecessary outbound traffic.
 
 ### The Solution
@@ -38,7 +42,7 @@ This repository provides a two-part ecosystem:
 2. **Drop-in Laravel Add-on (`whatsapp-addon/`)**: A modular package you simply copy into your existing Laravel project. It provides:
    - **Customer Login via 4-digit WhatsApp OTP**: Passwordless, frictionless login with leading-zero preservation.
    - **Cloudflare Turnstile Protection**: Prevents automated bot submission with managed challenge validation.
-   - **Asynchronous Redis Queue**: Decouples API responses from WhatsApp network latency for instant user feedback.
+   - **Asynchronous Redis Queue**: Decouples API responses from WhatsApp network latency for instant user feedback (<50ms).
    - **Multi-Device Sender Pool**: Attach multiple staff/agent WhatsApp numbers. The system distributes OTP delivery via **Round-Robin** and automatically switches to another active number if one disconnects.
    - **9 Back-Office Management Menus**: Full admin UI for sender devices, logs, webhooks, templates, and verified members.
 
@@ -47,7 +51,7 @@ This repository provides a two-part ecosystem:
 ## 🛡️ 2. Zero-Overwrite Guarantee
 
 **Preserve the existing Laravel website and its authentication flows.**  
-Core controllers and models use `WhatsApp*` names; services use the `WhatsAppOtp` namespace. Never overwrite host files. Review the User model contract, routes, and migrations before integrating.
+Core controllers and models use `WhatsApp*` names; services use the `WhatsAppOtp` namespace. Never overwrite host files.
 
 | Laravel Default File in Your Project | What This Add-on Uses Instead | Can It Overwrite Your File? |
 | :--- | :--- | :--- |
@@ -59,48 +63,57 @@ Core controllers and models use `WhatsApp*` names; services use the `WhatsAppOtp
 
 ---
 
-## 🔄 3. System Workflow & Architecture
+## 🔄 3. System Architecture & Database Topology
 
-The system connects your customer, your existing Laravel backend, the gateway engine, and WhatsApp network:
+### A. WhatsApp Gateway Engine (OpenWA Docker)
+The WhatsApp Gateway is a standalone, containerized microservice (`wa-gateway-openwa`, Port `18091`). It is **completely database-agnostic**:
+- It stores its own internal socket session keys inside the Docker volume (`openwa-data`).
+- It does **not** connect directly to your PostgreSQL, MySQL, or MongoDB database.
+- It communicates strictly via standard **HTTP REST API** (outbound: your backend sends messages) and **Webhooks** (inbound: status callbacks & incoming messages).
 
 ```text
-┌─────────────────────────────────┐
-│     Customer Web Browser        │
-│  (React WhatsAppOtpForm modal)  │
-└────────────────┬────────────────┘
-                 │ 1. Request OTP (e.g. 08123456789)
-                 ▼
-┌────────────────────────────────────────────────────────┐
-│             Your Existing Laravel Backend              │
-│  - Verifies Turnstile bot challenge server-side        │
-│  - Enqueues challenge ID to Redis (whatsapp-otp)       │
-│  - Returns HTTP 202 Accepted (<50ms response)          │
-└────────────────┬───────────────────────────────────────┘
-                 │ 2. Dequeued by background worker
-                 ▼
-┌────────────────────────────────────────────────────────┐
-│             Supervised Queue Worker                    │
-│  - Generates cryptographically secure 4-digit OTP      │
-│  - Stores SHA-256 HMAC hash in DB (otp_challenges)     │
-│  - Selects active device from SenderPool (Round-Robin) │
-└────────────────┬───────────────────────────────────────┘
-                 │ 3. POST /api/sessions/{session}/messages/send-text
-                 ▼
-┌────────────────────────────────────────────────────────┐
-│         OpenWA WhatsApp Gateway Container              │
-│                 (Port: 18091)                          │
-└────────────────┬───────────────────────────────────────┘
-                 │ 4. Baileys Multi-Session Socket
-                 ▼
-┌─────────────────────────────────┐       ┌───────────────────────────────┐
-│        WhatsApp Servers         │ ────> │ Customer WhatsApp Mobile App  │
-│                                 │       │ (Receives 4-digit OTP code)   │
-└─────────────────────────────────┘       └───────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────────┐
+│                        YOUR LARAVEL BACKEND                            │
+│                                                                        │
+│   ┌──────────────┐       ┌──────────────┐       ┌──────────────────┐   │
+│   │  PostgreSQL  │       │    Redis     │       │     MongoDB      │   │
+│   │   / MySQL    │  OR   │   (Queue     │  OR   │   (User Docs     │   │
+│   │ (Relational) │       │   & Cache)   │       │   & Chat Logs)   │   │
+│   └──────▲───────┘       └──────▲───────┘       └────────▲─────────┘   │
+│          │                      │                        │             │
+│          └──────────────────────┼────────────────────────┘             │
+│                                 │                                      │
+│                      Laravel Application Logic                         │
+└─────────────────────────────────┬──────────────────────────────────────┘
+                                  │
+                  1. Send Messages (HTTP POST JSON)
+                  2. Webhook Events (HTTP POST JSON)
+                                  │
+                                  ▼
+┌────────────────────────────────────────────────────────────────────────┐
+│             WhatsApp Gateway Container (wa-gateway-openwa)             │
+│                       Port 18091 (Internal/LAN)                        │
+└─────────────────────────────────┬──────────────────────────────────────┘
+                                  │
+                         WebSocket (Baileys)
+                                  │
+                                  ▼
+                     ┌─────────────────────────┐
+                     │ WhatsApp Global Network │
+                     └─────────────────────────┘
 ```
+
+### B. Backend Database Roles (PostgreSQL, MySQL, MongoDB, Redis)
+
+| Database | Supported? | Recommended Role in System |
+| :--- | :---: | :--- |
+| **PostgreSQL / MySQL** | ✅ Native | **Primary Auth Database**: Stores user accounts, additive phone verification columns, hashed OTP verifiers, and sender device pool records. |
+| **MongoDB** | ✅ Supported | **NoSQL Document Database**: Fully supported via `mongodb/laravel-mongodb`. Stores users and OTP challenges as BSON documents. Ideal for high-volume unstructured chat logs and raw webhook events without strict SQL schemas. |
+| **Redis** | ✅ Required in Production | **Asynchronous Queue & Cache**: Acts as the high-speed in-memory broker for the `whatsapp-otp` queue, atomic locks (`Cache::lock`), and rate-limit counters. It does not replace your primary database. |
 
 ---
 
-## 📊 4. Customer Login Flowchart
+## 📊 4. Customer Login Flowchart & Lifecycle
 
 ```mermaid
 flowchart TD
@@ -124,7 +137,7 @@ flowchart TD
 
 ### Plain-Language Breakdown:
 1. **Request OTP**: Customer inputs their mobile number on the login modal.
-2. **Challenge & Queue**: After clicking the button, Turnstile verifies the visitor. Laravel enqueues the challenge ID; a worker generates a 4-digit code, saves its peppered HMAC hash, and sends through an available WhatsApp sender. The form displays queued/sending status until submission or failure.
+2. **Challenge & Queue**: After clicking the button, Turnstile verifies the visitor. Laravel enqueues the challenge ID to Redis; a worker generates a 4-digit code, saves its peppered HMAC hash, and sends through an available WhatsApp sender.
 3. **Receive**: Customer receives the WhatsApp notification on their phone.
 4. **Verify**: Customer types the 4 digits into the website form. Verification fires automatically on the 4th digit.
 5. **Session Created**: The backend verifies the code atomically (`WHERE state = 'pending'`), marks it consumed, logs the user in via Laravel Sanctum session, and redirects to the dashboard.
@@ -179,7 +192,7 @@ From the repository root:
 ```bash
 docker compose up -d
 ```
-Verify it is running:
+Verify the gateway is running:
 ```bash
 curl http://127.0.0.1:18091/api/health/ready
 # Output: {"status":"ok", ...}
@@ -194,14 +207,36 @@ Copy the add-on files into your Laravel host application:
 
 > **Note**: Never overwrite host files (`User.php`, `Controller.php`, `api.php`, `web.php`). All files in this add-on use dedicated names (`WhatsApp*`).
 
-### Step 3: Run Database Migrations
+---
+
+### Step 3A: SQL Setup (PostgreSQL / MySQL)
+If using PostgreSQL or MySQL, run the included additive migrations:
 ```bash
 php artisan migrate
 ```
-This applies the 3 clean, additive migrations:
-1. `0001_wa_users.php` (adds `phone_e164`, `phone_verified_at` to `users`)
+This safely applies 3 non-destructive migrations:
+1. `0001_wa_users.php` (adds `phone_e164`, `phone_verified_at`, `tenant_key` to `users` if not present)
 2. `0002_wa_otp.php` (creates `otp_challenges` and `otp_deliveries`)
 3. `0003_wa_senders.php` (creates `sender_pool`)
+
+---
+
+### Step 3B: NoSQL Setup (MongoDB)
+If your Laravel application uses **MongoDB** (`mongodb/laravel-mongodb`):
+1. Configure your MongoDB connection in `config/database.php`.
+2. Update your `App\Models\User` to extend `MongoDB\Laravel\Auth\User as Authenticatable`.
+3. The add-on models (`WhatsAppOtpChallenge`, `WhatsAppOtpDelivery`, `WhatsAppSenderPool`) can extend `MongoDB\Laravel\Eloquent\Model`.
+4. Define a unique index for `phone_e164` to prevent duplicate registrations:
+   ```php
+   use MongoDB\Laravel\Schema\Blueprint;
+   use Illuminate\Support\Facades\Schema;
+
+   Schema::connection('mongodb')->table('users', function (Blueprint $collection) {
+       $collection->unique('phone_e164');
+   });
+   ```
+
+---
 
 ### Step 4: Register Routes & Service Provider
 In your `routes/api.php`, append:
@@ -217,7 +252,7 @@ App\Providers\WhatsAppOtpServiceProvider::class,
 ### Step 5: Configure Environment Variables (`.env`)
 Add these lines to your host Laravel `.env` file:
 ```dotenv
-# WhatsApp Gateway Engine
+# WhatsApp Gateway Engine (OpenWA Container)
 OPENWA_BASE_URL=http://127.0.0.1:18091
 OPENWA_SESSION_ID=otp-sender-1
 OPENWA_API_KEY=
@@ -234,6 +269,8 @@ WA_OTP_TURNSTILE_SECRET_KEY=<your-turnstile-secret-key>
 WA_OTP_TURNSTILE_HOSTNAMES=your-domain.com,login.your-domain.com,localhost,127.0.0.1
 
 # Asynchronous Redis Queue for OTP
+QUEUE_CONNECTION=redis
+CACHE_STORE=redis
 WA_OTP_QUEUE_ENABLED=true
 WA_OTP_QUEUE_CONNECTION=redis
 WA_OTP_QUEUE_NAME=whatsapp-otp
@@ -328,26 +365,32 @@ Once paired, the status changes to **`WORKING`** or **`READY`**, and outgoing OT
 
 ---
 
-## 🌐 11. VPS Deployment & Operations Guide
+## 🌐 11. Production Deployment & Operations Guide
 
-### How to SSH into Your VPS
+### Managing the WhatsApp Gateway Container:
 ```bash
-ssh user@<your-vps-ip>
-```
+# Start Gateway in background:
+docker compose up -d
 
-### Quick Operations Cheat Sheet:
-```bash
-# 1. Check all container status:
-docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
-
-# 2. Run Health Checks:
-curl -fsS http://127.0.0.1:18090/api/v1/health && echo ""
+# Check Gateway Health (Port 18091):
 curl -fsS http://127.0.0.1:18091/api/health/ready && echo ""
 
-# 3. View Real-time Worker Logs:
-docker logs -f --tail 100 wa-login-web-otp-worker-1
+# View Gateway Container Logs:
+docker logs -f --tail 100 wa-gateway-openwa
 
-# 4. Refresh Configuration After .env Updates:
+# Restart Gateway:
+docker compose restart
+```
+
+### Managing the Laravel Worker:
+```bash
+# Monitor the queue length:
+php artisan queue:monitor redis:whatsapp-otp
+
+# View worker logs via Supervisor:
+tail -f /var/log/supervisor/whatsapp-otp.log
+
+# Gracefully restart workers after code/env changes:
 php artisan config:clear && php artisan config:cache
 php artisan queue:restart
 ```

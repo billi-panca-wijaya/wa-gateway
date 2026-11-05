@@ -646,7 +646,7 @@ When a customer verifies their phone, an HTTP POST is dispatched to `WA_OTP_VERI
 
 ### 3. OTP Code Never Arrives on Phone
 - **Diagnostic Steps**:
-  1. Check worker logs: `docker logs wa-login-web-otp-worker-1` or `supervisorctl tail -f whatsapp-otp-worker`.
+  1. Check worker logs: `supervisorctl tail -f whatsapp-otp-worker` or check your queue worker terminal (`php artisan queue:work`).
   2. Verify sender status: Visit Back-Office -> **WhatsApp Sessions & Senders**. Confirm at least one device displays status **`READY`** or **`WORKING`**.
   3. Inspect pending jobs: Run `php artisan queue:monitor redis:whatsapp-otp`.
 

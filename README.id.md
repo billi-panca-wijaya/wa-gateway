@@ -11,15 +11,19 @@ Sebuah **WhatsApp API Gateway** mandiri (self-hosted) siap produksi dan **Add-on
 ## 📑 Daftar Isi
 1. [Apa Ini & Mengapa Menggunakannya? (Tujuan)](#-1-apa-ini--mengapa-menggunakannya-tujuan)
 2. [Garansi Zero-Overwrite (Tanpa Timpa File)](#-2-garansi-zero-overwrite-tanpa-timpa-file)
-3. [Alur Kerja & Arsitektur Sistem](#-3-alur-kerja--arsitektur-sistem)
+3. [Arsitektur Sistem & Topologi Database](#-3-arsitektur-sistem--topologi-database)
+   - [Mesin WhatsApp Gateway (OpenWA)](#a-mesin-whatsapp-gateway-openwa-docker)
+   - [Peran Database Backend (PostgreSQL, MySQL, MongoDB, Redis)](#b-peran-database-backend-postgresql-mysql-mongodb-redis)
 4. [Diagram Alur Login Pelanggan](#-4-diagram-alur-login-pelanggan)
 5. [Struktur Direktori & Isi Paket](#-5-struktur-direktori--isi-paket)
 6. [Panduan Langkah Demi Langkah (Cara Pakai)](#-6-panduan-langkah-demi-langkah-cara-pakai)
+   - [Pilihan A: Setup SQL (PostgreSQL / MySQL)](#langkah-3a-setup-sql-postgresql--mysql)
+   - [Pilihan B: Setup NoSQL (MongoDB)](#langkah-3b-setup-nosql-mongodb)
 7. [Panduan Setup Cloudflare Turnstile Bot Defense](#-7-panduan-setup-cloudflare-turnstile-bot-defense)
 8. [Antrean Asinkron Redis & Supervisor Worker](#-8-antrean-asinkron-redis--supervisor-worker)
 9. [Portal Admin Back-Office (9 Menu)](#-9-portal-admin-back-office-9-menu)
 10. [Menghubungkan Nomor WhatsApp Pengirim (Pairing)](#-10-menghubungkan-nomor-whatsapp-pengirim-pairing)
-11. [Panduan Deployment VPS & Operasional](#-11-panduan-deployment-vps--operasional)
+11. [Panduan Operasional & Deployment Produksi](#-11-panduan-operasional--deployment-produksi)
 12. [Batasan Integrasi & Keamanan](#-12-batasan-integrasi--keamanan)
 
 ---
@@ -59,42 +63,53 @@ Semua controller dan model inti menggunakan awalan `WhatsApp*`; service berada d
 
 ---
 
-## 🔄 3. Alur Kerja & Arsitektur Sistem
+## 🔄 3. Arsitektur Sistem & Topologi Database
+
+### A. Mesin WhatsApp Gateway (OpenWA Docker)
+WhatsApp Gateway berjalan sebagai microservice independen di dalam kontainer Docker (`wa-gateway-openwa`, Port `18091`). Mesin ini **bersifat database-agnostic (tidak terikat database apa pun)**:
+- Kredensial sesi WhatsApp dan soket Baileys disimpan di penyimpanan lokal kontainer (`openwa-data`).
+- Mesin ini **tidak terhubung langsung** ke database PostgreSQL, MySQL, ataupun MongoDB Anda.
+- Komunikasi dengan backend Anda dilakukan murni menggunakan **HTTP REST API** (saat backend Anda mengirim pesan) dan **Webhook** (saat ada pesan masuk atau status pengiriman).
 
 ```text
-┌─────────────────────────────────┐
-│     Browser Pelanggan           │
-│  (Modal React WhatsAppOtpForm)  │
-└────────────────┬────────────────┘
-                 │ 1. Minta OTP (contoh: 08123456789)
-                 ▼
-┌────────────────────────────────────────────────────────┐
-│             Backend Laravel Anda                       │
-│  - Verifikasi token bot Turnstile di server            │
-│  - Masukkan ID challenge ke antrean Redis              │
-│  - Balas HTTP 202 Accepted (respons cepat <50ms)       │
-└────────────────┬───────────────────────────────────────┘
-                 │ 2. Diambil oleh worker background
-                 ▼
-┌────────────────────────────────────────────────────────┐
-│             Supervised Queue Worker                    │
-│  - Generate kode 4-digit acak aman                     │
-│  - Simpan hash SHA-256 HMAC di database                │
-│  - Pilih perangkat aktif dari SenderPool (Round-Robin) │
-└────────────────┬───────────────────────────────────────┘
-                 │ 3. POST /api/sessions/{session}/messages/send-text
-                 ▼
-┌────────────────────────────────────────────────────────┐
-│         Kontainer WhatsApp Gateway OpenWA              │
-│                 (Port: 18091)                          │
-└────────────────┬───────────────────────────────────────┘
-                 │ 4. Baileys Multi-Session Socket
-                 ▼
-┌─────────────────────────────────┐       ┌───────────────────────────────┐
-│        Server WhatsApp          │ ────> │ HP WhatsApp Pelanggan         │
-│                                 │       │ (Menerima pesan kode 4-digit) │
-└─────────────────────────────────┘       └───────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────────┐
+│                        BACKEND ANDA (Laravel)                          │
+│                                                                        │
+│   ┌──────────────┐       ┌──────────────┐       ┌──────────────────┐   │
+│   │  PostgreSQL  │       │    Redis     │       │     MongoDB      │   │
+│   │   / MySQL    │  ATAU │   (Antrean   │  ATAU │   (Dokumen User  │   │
+│   │ (Relasional) │       │   & Cache)   │       │   & Log Chat)    │   │
+│   └──────▲───────┘       └──────▲───────┘       └────────▲─────────┘   │
+│          │                      │                        │             │
+│          └──────────────────────┼────────────────────────┘             │
+│                                 │                                      │
+│                      Logika Aplikasi Laravel                           │
+└─────────────────────────────────┬──────────────────────────────────────┘
+                                  │
+                  1. Kirim Pesan (HTTP POST JSON)
+                  2. Terima Webhook (HTTP POST JSON)
+                                  │
+                                  ▼
+┌────────────────────────────────────────────────────────────────────────┐
+│             Kontainer WhatsApp Gateway (wa-gateway-openwa)             │
+│                       Port 18091 (Internal/LAN)                        │
+└─────────────────────────────────┬──────────────────────────────────────┘
+                                  │
+                         WebSocket (Baileys)
+                                  │
+                                  ▼
+                     ┌─────────────────────────┐
+                     │ Jaringan Resmi WhatsApp │
+                     └─────────────────────────┘
 ```
+
+### B. Peran Database Backend (PostgreSQL, MySQL, MongoDB, Redis)
+
+| Database | Didukung? | Peran dalam Sistem |
+| :--- | :---: | :--- |
+| **PostgreSQL / MySQL** | ✅ Native | **Database Auth Utama**: Menyimpan akun user, kolom verifikasi telepon, hash verifier OTP, dan data rotasi sender pool melalui migrasi SQL bawaan. |
+| **MongoDB** | ✅ Didukung Penuh | **Database Dokumen NoSQL**: Didukung penuh melalui package `mongodb/laravel-mongodb`. Menyimpan user dan challenge OTP sebagai dokumen BSON. Sangat ideal untuk log pesan masuk yang bebas skema dan riwayat chat bervolume besar. |
+| **Redis** | ✅ Wajib di Produksi | **Antrean & Cache Kecepatan Tinggi**: Bertugas sebagai broker antrean memori untuk worker `whatsapp-otp`, penguncian atomik (`Cache::lock`), dan pembatasan frekuensi (rate limiter). Redis tidak menggantikan database utama Anda. |
 
 ---
 
@@ -177,7 +192,7 @@ Dari direktori root repositori ini:
 ```bash
 docker compose up -d
 ```
-Pastikan mesin berjalan:
+Pastikan gateway berjalan normal:
 ```bash
 curl http://127.0.0.1:18091/api/health/ready
 # Output: {"status":"ok", ...}
@@ -192,14 +207,36 @@ Salin file add-on ke aplikasi Laravel Anda:
 
 > **Catatan**: Jangan pernah menimpa file bawaan host (`User.php`, `Controller.php`, `api.php`, `web.php`). Semua file dalam add-on ini menggunakan nama khusus (`WhatsApp*`).
 
-### Langkah 3: Jalankan Migrasi Database
+---
+
+### Langkah 3A: Setup SQL (PostgreSQL / MySQL)
+Jika Anda menggunakan database relasional PostgreSQL atau MySQL, jalankan migrasi bawaan:
 ```bash
 php artisan migrate
 ```
-Ini akan mengeksekusi 3 migrasi yang aman:
-1. `0001_wa_users.php` (menambah kolom `phone_e164`, `phone_verified_at` di tabel `users`)
+Ini akan mengeksekusi 3 migrasi yang aman (hanya menambah kolom baru jika belum ada):
+1. `0001_wa_users.php` (menambah kolom `phone_e164`, `phone_verified_at`, `tenant_key` ke tabel `users`)
 2. `0002_wa_otp.php` (membuat tabel `otp_challenges` dan `otp_deliveries`)
 3. `0003_wa_senders.php` (membuat tabel `sender_pool`)
+
+---
+
+### Langkah 3B: Setup NoSQL (MongoDB)
+Jika aplikasi Laravel Anda menggunakan **MongoDB** (`mongodb/laravel-mongodb`):
+1. Konfigurasi koneksi MongoDB Anda di `config/database.php`.
+2. Pastikan `App\Models\User` Anda meng-extend `MongoDB\Laravel\Auth\User as Authenticatable`.
+3. Model add-on (`WhatsAppOtpChallenge`, `WhatsAppOtpDelivery`, `WhatsAppSenderPool`) dapat meng-extend `MongoDB\Laravel\Eloquent\Model`.
+4. Buat indeks unik untuk nomor HP agar tidak ada nomor ganda:
+   ```php
+   use MongoDB\Laravel\Schema\Blueprint;
+   use Illuminate\Support\Facades\Schema;
+
+   Schema::connection('mongodb')->table('users', function (Blueprint $collection) {
+       $collection->unique('phone_e164');
+   });
+   ```
+
+---
 
 ### Langkah 4: Daftarkan Routes & Service Provider
 Di file `routes/api.php` aplikasi Anda, tambahkan:
@@ -215,7 +252,7 @@ App\Providers\WhatsAppOtpServiceProvider::class,
 ### Langkah 5: Konfigurasi Environment Variables (`.env`)
 Tambahkan variabel berikut ke file `.env` Laravel host Anda:
 ```dotenv
-# WhatsApp Gateway Engine
+# Mesin WhatsApp Gateway (Kontainer OpenWA)
 OPENWA_BASE_URL=http://127.0.0.1:18091
 OPENWA_SESSION_ID=otp-sender-1
 OPENWA_API_KEY=
@@ -232,6 +269,8 @@ WA_OTP_TURNSTILE_SECRET_KEY=<secret-key-turnstile-anda>
 WA_OTP_TURNSTILE_HOSTNAMES=domain-anda.com,login.domain-anda.com,localhost,127.0.0.1
 
 # Antrean Asinkron Redis untuk OTP
+QUEUE_CONNECTION=redis
+CACHE_STORE=redis
 WA_OTP_QUEUE_ENABLED=true
 WA_OTP_QUEUE_CONNECTION=redis
 WA_OTP_QUEUE_NAME=whatsapp-otp
@@ -326,26 +365,32 @@ Setelah terhubung, status akan berubah menjadi **`WORKING`** atau **`READY`**, d
 
 ---
 
-## 🌐 11. Panduan Deployment VPS & Operasional
+## 🌐 11. Panduan Operasional & Deployment Produksi
 
-### Cara Masuk SSH ke VPS Anda
+### Mengelola Kontainer WhatsApp Gateway:
 ```bash
-ssh user@<ip-vps-anda>
-```
+# Menjalankan Gateway di background:
+docker compose up -d
 
-### Perintah Cepat Operasional VPS:
-```bash
-# 1. Periksa status semua kontainer:
-docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
-
-# 2. Uji Health Check:
-curl -fsS http://127.0.0.1:18090/api/v1/health && echo ""
+# Memeriksa Kesehatan Gateway (Port 18091):
 curl -fsS http://127.0.0.1:18091/api/health/ready && echo ""
 
-# 3. Pantau Log Worker Antrean:
-docker logs -f --tail 100 wa-login-web-otp-worker-1
+# Melihat Log Mesin Gateway:
+docker logs -f --tail 100 wa-gateway-openwa
 
-# 4. Segarkan Konfigurasi Setelah Update .env:
+# Me-restart Gateway:
+docker compose restart
+```
+
+### Mengelola Worker Laravel:
+```bash
+# Memantau jumlah antrean:
+php artisan queue:monitor redis:whatsapp-otp
+
+# Memeriksa log worker via Supervisor:
+tail -f /var/log/supervisor/whatsapp-otp.log
+
+# Merestart worker secara aman setelah update kode/env:
 php artisan config:clear && php artisan config:cache
 php artisan queue:restart
 ```
