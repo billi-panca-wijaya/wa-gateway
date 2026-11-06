@@ -1,0 +1,61 @@
+{
+    "name": "billi-panca-wijaya/laravel-whatsapp-gateway",
+    "description": "Enterprise WhatsApp OTP 4-Digit Login, Multi-Device Sender Pool, and Gateway Package for Laravel (Spatie-Style)",
+    "keywords": [
+        "billi-panca-wijaya",
+        "laravel",
+        "whatsapp",
+        "whatsapp-gateway",
+        "otp",
+        "openwa",
+        "authentication",
+        "spatie"
+    ],
+    "homepage": "https://github.com/billi-panca-wijaya/wa-gateway",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Billi Panca Wijaya",
+            "email": "billi@example.com",
+            "role": "Developer"
+        }
+    ],
+    "require": {
+        "php": "^8.2",
+        "illuminate/contracts": "^10.0|^11.0|^12.0|^13.0",
+        "illuminate/support": "^10.0|^11.0|^12.0|^13.0",
+        "illuminate/database": "^10.0|^11.0|^12.0|^13.0",
+        "illuminate/http": "^10.0|^11.0|^12.0|^13.0",
+        "illuminate/queue": "^10.0|^11.0|^12.0|^13.0",
+        "guzzlehttp/guzzle": "^7.8"
+    },
+    "require-dev": {
+        "orchestra/testbench": "^8.0|^9.0|^10.0",
+        "phpunit/phpunit": "^10.0|^11.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "BilliPancaWijaya\\WhatsAppGateway\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "BilliPancaWijaya\\WhatsAppGateway\\Tests\\": "tests/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "BilliPancaWijaya\\WhatsAppGateway\\WhatsAppGatewayServiceProvider"
+            ],
+            "aliases": {
+                "WhatsAppGateway": "BilliPancaWijaya\\WhatsAppGateway\\Facades\\WhatsAppGateway"
+            }
+        }
+    },
+    "config": {
+        "sort-packages": true
+    },
+    "minimum-stability": "dev",
+    "prefer-stable": true
+}

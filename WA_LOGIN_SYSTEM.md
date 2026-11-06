@@ -36,7 +36,7 @@
 ### The Solution
 This repository delivers an enterprise-grade, self-hosted, two-tier ecosystem:
 1. **WhatsApp Gateway Engine**: A standalone, containerized microservice running [OpenWA](https://github.com/open-wa/wa-automate-nodejs) powered by the battle-tested Baileys engine. Supports multi-session WebSocket connectivity, QR/pairing-code linkage, and direct messaging without per-message platform fees.
-2. **Drop-in Laravel Add-on (`whatsapp-addon/`)**: An isolated, additive Laravel package providing passwordless 4-digit WhatsApp OTP login, multi-sender round-robin rotation, Cloudflare Turnstile verification, and a 9-menu operations back-office.
+2. **Spatie-Style Laravel Package (`billi-panca-wijaya/laravel-whatsapp-gateway`)**: A clean, modular Laravel package following Spatie open-source conventions. Provides passwordless 4-digit WhatsApp OTP login, multi-sender round-robin rotation, Cloudflare Turnstile verification, and a 9-menu operations back-office.
 
 ---
 
@@ -500,7 +500,11 @@ WA_OTP_WEBHOOK_SECRET=your-webhook-hmac-secret
 ## 11. Frontend SPA Integration Guide (React)
 
 ### Installation
-Copy `whatsapp-addon/frontend/` into your React project (e.g. `src/features/whatsapp/`).
+Publish frontend components via Artisan:
+```bash
+php artisan vendor:publish --tag="whatsapp-gateway-frontend"
+```
+Or import directly from `resources/frontend/` into your React project (e.g. `src/features/whatsapp/`).
 
 ### Component Usage Example
 ```tsx
